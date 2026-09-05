@@ -1,201 +1,235 @@
 /* ============================================================
    BOLD — main.js
-   Scroll driver, phase state machine, palette shift, and the
-   full/reduced motion switch.
+   Theme + motion modes, the scroll-driven swing, and the page.
 
    The swing is not a scroll-mapped animation curve: scroll sets a
-   TARGET angle, and a damped spring chases it. That is what gives
-   the bell mass — flick the wheel and it overshoots, ease down
-   and it lags behind you.
+   TARGET angle and a damped spring chases it, with the reader's
+   scroll velocity injected into angular velocity. That lag is what
+   gives the bell mass.
    ============================================================ */
 (function () {
   'use strict';
 
   var html = document.documentElement;
 
-  /* ---------- sequence timing, in stage progress (0 → 1) ---------- */
-  var MORPH_IN   = 0.09;   // 3D bell starts resolving out of the outline
-  var MORPH_OUT  = 0.17;   // outline fully gone
-  var SWING_FROM = 0.16;
-  var SWING_PEAK = 0.60;   // maximum elevation
-  var BURST_FROM = 0.58;
-  var BURST_TO   = 0.76;
-  var REVEAL_FROM= 0.70;
-  var REVEAL_TO  = 0.96;
-  var PEAK_ANGLE = 1.18;   // radians at the top of the arc
-  var BACK_ANGLE = -0.62;  // the hike back
-  var BELL_H     = 2.97;   // the 3D bell's height in world units
-  var PEAK_SCREEN= { x: 0.56, y: 0.30 };   // where the burst should land, in viewport fractions
+  /* ---- sequence timing, as fractions of the stage's scroll length ---- */
+  var MORPH_IN = 0.09, MORPH_OUT = 0.17;
+  var SWING_FROM = 0.16, SWING_PEAK = 0.60;
+  var BURST_FROM = 0.58, BURST_TO = 0.76;
+  var REVEAL_FROM = 0.70, REVEAL_TO = 0.96;
+  var PEAK_ANGLE = 1.18, BACK_ANGLE = -0.62;
+  var BELL_H = 2.97;
+  var PEAK_SCREEN = { x: 0.56, y: 0.30 };
 
-  /* ---------- helpers ---------- */
-  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
-  function clamp01(v) { return clamp(v, 0, 1); }
-  function range(v, a, b) { return clamp01((v - a) / (b - a)); }
-  function easeInOut(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
-  function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
-  /* fade in then out across [a,b] with soft shoulders */
-  function band(v, a, b, edge) {
-    if (v <= a || v >= b) return 0;
-    var e = edge || 0.18, w = b - a, t = (v - a) / w;
-    return clamp01(Math.min(t / e, (1 - t) / e));
+  function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+  function clamp01(v){ return clamp(v,0,1); }
+  function range(v,a,b){ return clamp01((v-a)/(b-a)); }
+  function easeInOut(t){ return t<0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2; }
+  function easeOut(t){ return 1-Math.pow(1-t,3); }
+  function band(v,a,b,edge){
+    if (v<=a||v>=b) return 0;
+    var e = edge||0.18, t = (v-a)/(b-a);
+    return clamp01(Math.min(t/e,(1-t)/e));
   }
-  function hexToRgb(h) {
-    return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-  }
-  function mixHex(a, b, t) {
-    var A = hexToRgb(a), B = hexToRgb(b);
-    return 'rgb(' + Math.round(A[0] + (B[0] - A[0]) * t) + ',' +
-                    Math.round(A[1] + (B[1] - A[1]) * t) + ',' +
-                    Math.round(A[2] + (B[2] - A[2]) * t) + ')';
-  }
-  /* three-stop ramp: legacy → transitional → BOLD */
-  function ramp(t, c0, c1, c2) {
-    return t < 0.5 ? mixHex(c0, c1, t / 0.5) : mixHex(c1, c2, (t - 0.5) / 0.5);
+
+  function store(k,v){ try { if (v===undefined) return localStorage.getItem(k); localStorage.setItem(k,v); } catch(e){ return null; } }
+  function prefersReduced(){ return window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  function webglOK(){
+    try { var c = document.createElement('canvas');
+      return !!(window.WebGLRenderingContext && (c.getContext('webgl') || c.getContext('experimental-webgl'))); }
+    catch(e){ return false; }
   }
 
   /* ============================================================
-     Motion mode
+     Theme
      ============================================================ */
-  var STORE_KEY = 'bold:motion';
-  var toggle = document.getElementById('motionToggle');
+  var themeBtn = document.getElementById('themeToggle');
+  var themeLabel = document.getElementById('themeLabel');
+  var metaTheme = document.querySelector('meta[name="theme-color"]');
 
-  function prefersReduced() {
-    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function applyTheme(t, persist) {
+    html.setAttribute('data-theme', t);
+    if (themeBtn) {
+      themeBtn.setAttribute('aria-pressed', String(t === 'dark'));
+      themeLabel.textContent = t === 'dark' ? 'Light' : 'Dark';
+      themeBtn.setAttribute('aria-label', t === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+    }
+    if (metaTheme) {
+      metaTheme.setAttribute('content',
+        getComputedStyle(html).getPropertyValue('--bg').trim() || (t === 'dark' ? '#10171A' : '#FFFFFF'));
+    }
+    if (persist) store('bold:theme', t);
+    if (window.SwingScene && window.SwingScene.isReady()) window.SwingScene.refreshPalette();
   }
-  function webglOK() {
-    try {
-      var c = document.createElement('canvas');
-      return !!(window.WebGLRenderingContext && (c.getContext('webgl') || c.getContext('experimental-webgl')));
-    } catch (e) { return false; }
+  if (themeBtn) themeBtn.addEventListener('click', function () {
+    applyTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark', true);
+  });
+  /* follow the OS only while the reader hasn't made an explicit choice */
+  if (window.matchMedia) {
+    var mq = matchMedia('(prefers-color-scheme: dark)');
+    (mq.addEventListener ? mq.addEventListener.bind(mq,'change') : mq.addListener.bind(mq))(function (e) {
+      if (!store('bold:theme')) applyTheme(e.matches ? 'dark' : 'light', false);
+    });
   }
-  function stored() {
-    try { return localStorage.getItem(STORE_KEY); } catch (e) { return null; }
+  applyTheme(html.getAttribute('data-theme') || 'light', false);
+
+  /* ============================================================
+     Mobile navigation
+     ============================================================ */
+  var burger = document.getElementById('navBurger');
+  var panel = document.getElementById('navPanel');
+  var nav = document.getElementById('nav');
+
+  function setMenu(open) {
+    if (!panel || !burger) return;
+    panel.setAttribute('data-open', String(open));
+    burger.setAttribute('aria-expanded', String(open));
+    if (open) html.style.setProperty('--nav-h', nav.offsetHeight + 'px');
   }
-  function remember(v) {
-    try { localStorage.setItem(STORE_KEY, v); } catch (e) { /* private mode — fine */ }
+  if (burger) {
+    burger.addEventListener('click', function () {
+      setMenu(panel.getAttribute('data-open') !== 'true');
+    });
+    panel.addEventListener('click', function (e) { if (e.target.closest('a')) setMenu(false); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && panel.getAttribute('data-open') === 'true') { setMenu(false); burger.focus(); }
+    });
+    window.addEventListener('resize', function () { if (innerWidth > 1000) setMenu(false); }, { passive: true });
   }
 
-  var saved = stored();
-  var mode = saved === 'full' || saved === 'reduced'
-    ? saved
-    : (prefersReduced() || !webglOK() || !window.THREE ? 'reduced' : 'full');
+  /* ============================================================
+     Motion mode — and the lazy load of Three.js.
+     Reduced-motion readers must not pay 589KB for a scene that is
+     never built, so the library is only fetched on demand.
+     ============================================================ */
+  var motionBtn = document.getElementById('motionToggle');
+  var motionLabel = document.getElementById('motionLabel');
+  var mode = html.getAttribute('data-motion') === 'reduced' ? 'reduced' : 'full';
+  if (!webglOK()) mode = 'reduced';
+
+  var threeLoading = null;
+  function loadThree() {
+    if (window.THREE) return Promise.resolve(true);
+    if (threeLoading) return threeLoading;
+    threeLoading = new Promise(function (resolve) {
+      var s = document.createElement('script');
+      s.src = 'js/vendor/three.min.js';
+      s.onload = function () {
+        var s2 = document.createElement('script');
+        s2.src = 'js/swing-scene.js';
+        s2.onload = function () { resolve(!!window.SwingScene); };
+        s2.onerror = function () { resolve(false); };
+        document.head.appendChild(s2);
+      };
+      s.onerror = function () { resolve(false); };
+      document.head.appendChild(s);
+    });
+    return threeLoading;
+  }
 
   function applyMode(next, persist) {
     mode = next;
     html.setAttribute('data-motion', mode);
-    if (toggle) {
-      toggle.setAttribute('aria-pressed', String(mode === 'full'));
-      toggle.querySelector('.motion-toggle__label').textContent = mode === 'full' ? 'Motion' : 'Static';
-      toggle.title = mode === 'full' ? 'Switch to the static version' : 'Switch to the animated version';
+    if (motionBtn) {
+      motionBtn.setAttribute('aria-pressed', String(mode === 'full'));
+      motionLabel.textContent = mode === 'full' ? 'Motion' : 'Static';
+      motionBtn.setAttribute('aria-label', mode === 'full' ? 'Turn the intro animation off' : 'Turn the intro animation on');
     }
-    if (persist) remember(mode);
+    if (persist) store('bold:motion', mode);
     if (mode === 'full') boot(); else teardown();
   }
-
-  if (toggle) {
-    toggle.addEventListener('click', function () {
-      applyMode(mode === 'full' ? 'reduced' : 'full', true);
-      window.scrollTo({ top: 0, behavior: 'auto' });
-    });
-  }
+  if (motionBtn) motionBtn.addEventListener('click', function () {
+    applyMode(mode === 'full' ? 'reduced' : 'full', true);
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  });
 
   /* ============================================================
      The stage
      ============================================================ */
-  var stage      = document.getElementById('stage');
-  var tilt       = document.getElementById('stageTilt');
-  var glCanvas   = document.getElementById('gl');
-  var trailEl    = document.getElementById('trail');
-  var mark       = document.getElementById('legacyMark');
-  var heroCopy   = document.getElementById('heroCopy');
-  var hooks      = [].slice.call(document.querySelectorAll('.hook'));
-  var wipe       = document.getElementById('stageWipe');
-  var streams    = document.getElementById('streams');
+  var stage = document.getElementById('stage');
+  var tilt = document.getElementById('stageTilt');
+  var glCanvas = document.getElementById('gl');
+  var trailEl = document.getElementById('trail');
+  var mark = document.getElementById('legacyMark');
+  var heroCopy = document.getElementById('heroCopy');
+  var heroMini = document.getElementById('heroMini');
+  var stageBar = document.getElementById('stageBar');
+  var hooks = [].slice.call(document.querySelectorAll('.hook'));
+  var wipe = document.getElementById('stageWipe');
+  var streams = document.getElementById('streams');
   var streamPath = [].slice.call(document.querySelectorAll('.streams__path'));
-  var nav        = document.getElementById('nav');
-  var cta        = document.getElementById('exploreCta');
+  var cta = document.getElementById('exploreCta');
 
   var running = false, rafId = 0, booted = false;
-  var angle = 0, angVel = 0, lastY = window.pageYOffset, lastT = 0, energy = 0;
-
-  /* ------------------------------------------------------------
-     Framing. At rest the 3D bell must sit exactly where the
-     outlined mark sits, at exactly its on-screen size — that is
-     what makes the morph read as one object rather than a swap.
-     From there the anchor drifts so the top of the arc lands on
-     PEAK_SCREEN instead of sailing off the top of the window.
-     ------------------------------------------------------------ */
+  var angle = 0, angVel = 0, lastY = pageYOffset, lastT = 0, energy = 0;
   var restAnchor = { x: 0, y: 0 }, restScale = 0.62, framed = false;
 
+  function stageProgress() {
+    if (!stage) return 0;
+    var travel = stage.offsetHeight - innerHeight;
+    if (travel <= 0) return 0;
+    return clamp01(-stage.getBoundingClientRect().top / travel);
+  }
+
+  /* At rest the 3D bell must sit exactly where the outlined mark sits,
+     at exactly its on-screen size — that is what makes the morph read as
+     one object rather than a swap. */
   function measureRest() {
     if (!mark || !window.SwingScene || !window.SwingScene.isReady()) return;
     var r = mark.getBoundingClientRect();
     if (!r.height) return;
     var v = window.SwingScene.viewSize();
-    var w = window.innerWidth, h = window.innerHeight;
-    restAnchor.x = ((r.left + r.width / 2) / w * 2 - 1) * v.halfW;
-    restAnchor.y = -((r.top + r.height / 2) / h * 2 - 1) * v.halfH;
-    restScale = (r.height / (h / (2 * v.halfH))) / BELL_H;
+    restAnchor.x = ((r.left + r.width / 2) / innerWidth * 2 - 1) * v.halfW;
+    restAnchor.y = -((r.top + r.height / 2) / innerHeight * 2 - 1) * v.halfH;
+    restScale = (r.height / (innerHeight / (2 * v.halfH))) / BELL_H;
     framed = true;
   }
 
+  /* The anchor drifts so the top of the arc lands on PEAK_SCREEN at any
+     aspect ratio, instead of sailing off the top of the window. */
   function anchorFor(p) {
-    var v = window.SwingScene.viewSize();
-    var ARM = window.SwingScene.ARM;
-    /* where the bell sits relative to its anchor at full extension */
-    var offX = ARM * Math.sin(PEAK_ANGLE);
-    var offY = ARM - ARM * Math.cos(PEAK_ANGLE);
-    var peakAnchor = {
+    var v = window.SwingScene.viewSize(), ARM = window.SwingScene.ARM;
+    var offX = ARM * Math.sin(PEAK_ANGLE), offY = ARM - ARM * Math.cos(PEAK_ANGLE);
+    var peak = {
       x: (PEAK_SCREEN.x * 2 - 1) * v.halfW - offX,
       y: -(PEAK_SCREEN.y * 2 - 1) * v.halfH - offY
     };
     var t = easeInOut(range(p, MORPH_IN + 0.01, 0.34));
-    return {
-      x: restAnchor.x + (peakAnchor.x - restAnchor.x) * t,
-      y: restAnchor.y + (peakAnchor.y - restAnchor.y) * t
-    };
+    return { x: restAnchor.x + (peak.x - restAnchor.x) * t, y: restAnchor.y + (peak.y - restAnchor.y) * t };
   }
 
-  function stageProgress() {
-    if (!stage) return 0;
-    var travel = stage.offsetHeight - window.innerHeight;
-    if (travel <= 0) return 0;
-    return clamp01(-stage.getBoundingClientRect().top / travel);
-  }
-
-  /* Where the scroll *wants* the bell to be. The spring decides
-     where it actually is. */
   function targetAngle(p) {
     if (p < SWING_FROM) return 0;
     var u = clamp01((p - SWING_FROM) / (SWING_PEAK - SWING_FROM));
     if (u < 0.3) return BACK_ANGLE * easeInOut(u / 0.3);
-    var b = (u - 0.3) / 0.7;
-    return BACK_ANGLE + (PEAK_ANGLE - BACK_ANGLE) * easeInOut(b);
+    return BACK_ANGLE + (PEAK_ANGLE - BACK_ANGLE) * easeInOut((u - 0.3) / 0.7);
   }
 
   function paint(p) {
-    /* ---- palette shift ---- */
-    var bg     = ramp(p, '#0a0c10', '#150f0a', '#0a0818');
-    var accent = ramp(p, '#c9ced8', '#ff9a1f', '#ffd24a');
-    html.style.setProperty('--bg', bg);
-    html.style.setProperty('--accent', accent);
+    if (stageBar) stageBar.style.width = (p * 100).toFixed(1) + '%';
 
-    html.setAttribute('data-phase', p < MORPH_IN ? 'legacy' : (p < REVEAL_FROM ? 'swing' : 'bold'));
-
-    /* ---- Phase 1: the heritage mark hands off ---- */
     var markOut = range(p, MORPH_IN, MORPH_OUT);
     if (mark) {
       mark.style.opacity = String(1 - markOut);
       mark.style.transform = 'translate(-50%,-50%) scale(' + (1 + markOut * 0.35) + ')';
     }
+
+    /* the full hero hands over to the mini rail — it never goes blank */
+    var handoff = range(p, 0.10, 0.22);
     if (heroCopy) {
-      var out = range(p, 0.04, 0.16);
-      heroCopy.style.opacity = String(1 - out);
-      heroCopy.style.transform = 'translateY(' + (-out * 40) + 'px)';
-      heroCopy.style.pointerEvents = out > 0.5 ? 'none' : '';
+      heroCopy.style.opacity = String(1 - handoff);
+      heroCopy.style.transform = 'translateY(' + (-handoff * 34) + 'px)';
+      heroCopy.style.visibility = handoff >= 1 ? 'hidden' : '';
+    }
+    if (heroMini) {
+      var miniIn = handoff * (1 - range(p, 0.93, 1));
+      heroMini.style.opacity = String(miniIn);
+      heroMini.style.transform = 'translateY(' + ((1 - miniIn) * 14) + 'px)';
+      heroMini.setAttribute('aria-hidden', miniIn < 0.5 ? 'true' : 'false');
+      var miniBtn = heroMini.querySelector('a');
+      if (miniBtn) miniBtn.tabIndex = miniIn > 0.5 ? 0 : -1;
     }
 
-    /* ---- Phase 2 + 3: the hooks ---- */
     var bands = [band(p, 0.19, 0.42), band(p, 0.42, 0.62), band(p, 0.72, 0.99, 0.22)];
     for (var i = 0; i < hooks.length; i++) {
       var a = bands[i] || 0;
@@ -203,7 +237,6 @@
       hooks[i].style.transform = 'translate(-50%,calc(-50% + ' + ((1 - a) * 26) + 'px))';
     }
 
-    /* ---- Phase 3: the energy arc opens the page ---- */
     var rev = range(p, REVEAL_FROM, REVEAL_TO);
     if (wipe) {
       wipe.style.opacity = String(Math.sin(rev * Math.PI) * 0.95);
@@ -217,7 +250,6 @@
       }
     }
 
-    /* ---- the inertia-driven page tilt ---- */
     if (tilt) {
       var lean = clamp(angle, -1.4, 1.4);
       tilt.style.transform =
@@ -232,24 +264,19 @@
     lastT = now;
 
     var p = stageProgress();
-    var y = window.pageYOffset;
-    var dScroll = y - lastY;
+    var y = pageYOffset, dScroll = y - lastY;
     lastY = y;
 
-    /* damped spring toward the scroll-set target, with the user's
-       scroll velocity injected straight into angular velocity */
     var target = targetAngle(p);
-    var k = 26 + p * 22, damp = 5.4;
-    angVel += (target - angle) * k * dt - angVel * damp * dt;
+    var k = 26 + p * 22;
+    angVel += (target - angle) * k * dt - angVel * 5.4 * dt;
     angVel += dScroll * 0.0010;
     angVel = clamp(angVel, -14, 14);
     angle += angVel * dt;
 
-    /* the trail is a motion artefact, but a slow scroller still deserves
-       to see the arc — so speed rides on top of a floor that exists for
-       the whole swing rather than replacing it */
-    var floor = band(p, 0.15, 0.68, 0.12) * 0.42;
-    var eTarget = Math.min(1, Math.max(floor, clamp01(Math.abs(angVel) / 5.5)));
+    /* speed rides on top of a floor that lasts the whole swing, so a slow
+       scroller still sees the arc */
+    var eTarget = Math.min(1, Math.max(band(p, 0.15, 0.68, 0.12) * 0.42, clamp01(Math.abs(angVel) / 5.5)));
     energy += (eTarget - energy) * Math.min(1, dt * 8);
 
     paint(p);
@@ -257,136 +284,109 @@
     if (window.SwingScene && window.SwingScene.isReady()) {
       if (!framed || p < 0.03) measureRest();
       window.SwingScene.update({
-        p: p,
-        anchor: anchorFor(p),
-        scale: restScale,
-        angle: angle,
-        angVel: angVel,
-        energy: energy,
+        p: p, angle: angle, angVel: angVel, energy: energy,
+        anchor: anchorFor(p), scale: restScale,
         appear: range(p, MORPH_IN, MORPH_OUT + 0.04),
         burstT: range(p, BURST_FROM, BURST_TO),
         visible: p > MORPH_IN - 0.02 && p < 0.995
       });
     }
 
-    if (nav) nav.classList.toggle('is-scrolled', y > 40);
+    if (nav) {
+      nav.classList.toggle('is-scrolled', y > 40);
+      nav.classList.toggle('is-over-stage', stage.getBoundingClientRect().bottom > nav.offsetHeight);
+    }
     rafId = requestAnimationFrame(frame);
   }
 
   function boot() {
     if (mode !== 'full') return;
     if (!booted) {
-      var ok = window.SwingScene && window.THREE && window.SwingScene.init(glCanvas, trailEl);
-      if (!ok) {                       // no THREE (CDN blocked) or no WebGL
-        applyMode('reduced', false);
-        return;
-      }
-      booted = true;
-      window.addEventListener('resize', onResize, { passive: true });
+      loadThree().then(function (ok) {
+        if (!ok || !window.SwingScene.init(glCanvas, trailEl)) { applyMode('reduced', false); return; }
+        booted = true;
+        addEventListener('resize', onResize, { passive: true });
+        start();
+      });
+      return;
     }
-    if (!running) {
-      running = true;
-      lastT = 0;
-      lastY = window.pageYOffset;
-      rafId = requestAnimationFrame(frame);
-    }
+    start();
   }
-
+  function start() {
+    if (running) return;
+    running = true; lastT = 0; lastY = pageYOffset;
+    rafId = requestAnimationFrame(frame);
+  }
   function teardown() {
     running = false;
     if (rafId) cancelAnimationFrame(rafId);
     if (window.SwingScene && window.SwingScene.isReady()) window.SwingScene.clearTrail();
-    html.style.setProperty('--bg', '#0a0c10');
-    html.style.setProperty('--accent', '#c9ced8');
+    if (nav) nav.classList.remove('is-over-stage');
   }
 
   var resizeTimer;
   function onResize() {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(function () {
-      if (window.SwingScene && window.SwingScene.isReady()) {
-        window.SwingScene.resize();
-        framed = false;
-      }
+      if (window.SwingScene && window.SwingScene.isReady()) { window.SwingScene.resize(); framed = false; }
     }, 120);
   }
 
-  /* CTA hover ignites the outline early — the promise of the swing */
   if (cta && mark) {
-    cta.addEventListener('mouseenter', function () { mark.classList.add('is-hot'); });
-    cta.addEventListener('mouseleave', function () { mark.classList.remove('is-hot'); });
-    cta.addEventListener('focus', function () { mark.classList.add('is-hot'); });
-    cta.addEventListener('blur', function () { mark.classList.remove('is-hot'); });
+    ['mouseenter','focus'].forEach(function (ev) { cta.addEventListener(ev, function(){ mark.classList.add('is-hot'); }); });
+    ['mouseleave','blur'].forEach(function (ev) { cta.addEventListener(ev, function(){ mark.classList.remove('is-hot'); }); });
   }
 
   /* ============================================================
      Below the fold
      ============================================================ */
   var revealables = [].slice.call(document.querySelectorAll(
-    '.section-head, .pillar, .metric, .matrix__scroll, .voice, .plan, .cta__inner'
+    '.section-head, .who, .pillar, .step, .metric, .matrix__scroll, .matrix__cards, .voice, .plan, .qa, .cta__inner, .contact-card'
   ));
-  revealables.forEach(function (el, i) {
-    el.classList.add('reveal');
-    el.style.transitionDelay = (i % 4) * 70 + 'ms';
-  });
+  revealables.forEach(function (el, i) { el.classList.add('reveal'); el.style.transitionDelay = (i % 4) * 70 + 'ms'; });
 
   if ('IntersectionObserver' in window) {
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (e) {
         if (!e.isIntersecting) return;
         e.target.classList.add('is-in');
-        if (e.target.classList.contains('metric')) countUp(e.target.querySelector('.metric__num'));
         io.unobserve(e.target);
       });
-    }, { rootMargin: '0px 0px -12% 0px', threshold: 0.15 });
+    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.12 });
     revealables.forEach(function (el) { io.observe(el); });
   } else {
     revealables.forEach(function (el) { el.classList.add('is-in'); });
   }
 
-  /* DEMO DATA: these are placeholder figures — the counter only
-     animates whatever text is already in the markup. */
-  function countUp(el) {
-    if (!el || mode !== 'full' || prefersReduced()) return;
-    var m = /^(\D*)([\d,]+)(.*)$/.exec(el.textContent.trim());
-    if (!m) return;
-    var pre = m[1], target = parseInt(m[2].replace(/,/g, ''), 10), post = m[3];
-    var start = performance.now(), dur = 1100;
-    (function step(now) {
-      var t = clamp01((now - start) / dur);
-      var v = Math.round(target * easeOut(t));
-      el.textContent = pre + v.toLocaleString('en-US') + post;
-      if (t < 1) requestAnimationFrame(step);
-    })(start);
-  }
-
-  /* Demo form — deliberately not wired to anything. */
+  /* Demo form. Deliberately not wired to anything — and it says so. */
   var form = document.getElementById('ctaForm');
   var status = document.getElementById('ctaStatus');
+  var ICON_BAD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5" stroke-linecap="round"/></svg>';
+  var ICON_OK  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.5 2.5L16 9.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
   if (form) {
+    var email = form.querySelector('#email');
     form.addEventListener('submit', function (e) {
       e.preventDefault();
-      var email = form.querySelector('#email').value.trim();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
-        status.textContent = 'That email doesn’t look right — mind checking it?';
+      var v = email.value.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) {
+        email.setAttribute('aria-invalid', 'true');
+        status.dataset.state = 'error';
+        status.innerHTML = ICON_BAD + '<span>That email address doesn’t look right — could you check it?</span>';
+        email.focus();
         return;
       }
-      status.textContent = 'Demo build: this form isn’t connected to a backend yet. Nothing was sent.';
+      email.removeAttribute('aria-invalid');
+      status.dataset.state = 'ok';
+      status.innerHTML = ICON_OK + '<span>This is a demo build, so nothing was actually sent. On the real site a coach would reply within one working day.</span>';
       form.reset();
     });
+    email.addEventListener('input', function () {
+      if (email.getAttribute('aria-invalid') === 'true' && email.value.trim()) {
+        email.removeAttribute('aria-invalid'); status.dataset.state = ''; status.innerHTML = '';
+      }
+    });
   }
-
-  /* Smooth in-page nav that respects the motion setting */
-  document.addEventListener('click', function (e) {
-    var a = e.target.closest && e.target.closest('a[href^="#"]');
-    if (!a) return;
-    var id = a.getAttribute('href');
-    if (id === '#' || id === '#top') { e.preventDefault(); window.scrollTo({ top: 0, behavior: mode === 'full' ? 'smooth' : 'auto' }); return; }
-    var t = document.querySelector(id);
-    if (!t) return;
-    e.preventDefault();
-    t.scrollIntoView({ behavior: mode === 'full' && !prefersReduced() ? 'smooth' : 'auto', block: 'start' });
-  });
 
   applyMode(mode, false);
 })();

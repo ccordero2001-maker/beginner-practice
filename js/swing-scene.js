@@ -27,6 +27,24 @@
   var pAttr, pOrigin, pDir, pSpeed, lPairs;
   var trailCtx, trailCanvas, trail = [];
   var burstOrigin = null, tmp = null;   // built in init(); THREE may not exist yet
+
+  /* The scene takes its colours from the active palette's CSS custom
+     properties, so swapping palette or theme re-tints the swing without
+     touching this file. */
+  var pal = { trail: '255,154,31', glow: '255,210,74', node: '#ffd24a', node2: '#9dc183' };
+  function readPalette() {
+    var cs = getComputedStyle(document.documentElement);
+    function v(name, fb) { var x = cs.getPropertyValue(name).trim(); return x || fb; }
+    pal.trail = v('--swing-trail', pal.trail);
+    pal.glow  = v('--swing-glow',  pal.glow);
+    pal.node  = v('--swing-node',  pal.node);
+    pal.node2 = v('--swing-node-2', pal.node2);
+  }
+  function rgbCss(triplet, a) { return 'rgba(' + triplet + ',' + a + ')'; }
+  function rgbHexNum(triplet) {
+    var p = triplet.split(',').map(function (n) { return Math.max(0, Math.min(255, parseInt(n, 10) || 0)); });
+    return (p[0] << 16) | (p[1] << 8) | p[2];
+  }
   var ready = false;
   var dpr = 1;
 
@@ -66,10 +84,11 @@
       faceCanvas(function (c, s) { base(c, s, '#262b34', '#161a21'); bar(c, s * 0.22, s * 0.22, s * 0.56, s * 0.56, '#c9cfda', 14); }),
       // -Y : floor bounce
       faceCanvas(function (c, s) { base(c, s, '#0b0d11', '#050608'); }),
-      // +Z : warm kicker — the amber of the arc
-      faceCanvas(function (c, s) { base(c, s, '#191512', '#08090b'); bar(c, s * 0.1, s * 0.6, s * 0.8, s * 0.14, '#7e4a14', 13); }),
-      // -Z : gold rim
-      faceCanvas(function (c, s) { base(c, s, '#14141c', '#07070a'); bar(c, s * 0.3, s * 0.05, s * 0.4, s * 0.12, '#7d6a26', 11); })
+      // +Z : low kicker — kept neutral so the metal reads as metal in every
+      //      palette; the palette's colour arrives via the lights and emissive
+      faceCanvas(function (c, s) { base(c, s, '#16181c', '#08090b'); bar(c, s * 0.1, s * 0.6, s * 0.8, s * 0.14, '#5d626b', 13); }),
+      // -Z : rim
+      faceCanvas(function (c, s) { base(c, s, '#141419', '#07070a'); bar(c, s * 0.3, s * 0.05, s * 0.4, s * 0.12, '#6a6f78', 11); })
     ];
 
     var env = new THREE.CubeTexture(faces);
@@ -119,7 +138,7 @@
       bumpMap: bump,
       bumpScale: 0.012,
       roughnessMap: bump,   // cast-iron speckle, so the highlight breaks up
-      emissive: 0xff7a1a,
+      emissive: rgbHexNum(pal.trail),
       emissiveIntensity: 0.0,
       transparent: true
     });
@@ -156,8 +175,8 @@
     var ctx = c.getContext('2d');
     var g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
     g.addColorStop(0.00, 'rgba(255,255,255,1)');
-    g.addColorStop(0.25, 'rgba(255,214,120,0.85)');
-    g.addColorStop(1.00, 'rgba(255,154,31,0)');
+    g.addColorStop(0.25, rgbCss(pal.glow, 0.85));
+    g.addColorStop(1.00, rgbCss(pal.trail, 0));
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, 64, 64);
     return new THREE.CanvasTexture(c);
@@ -170,9 +189,9 @@
     pSpeed = new Float32Array(P_COUNT);
     pOrigin = new Float32Array(P_COUNT * 3);
 
-    var amber = new THREE.Color(0xff9a1f);
-    var gold = new THREE.Color(0xffd24a);
-    var violet = new THREE.Color(0x7b6bff);
+    var cA = new THREE.Color(rgbHexNum(pal.trail));
+    var cB = new THREE.Color(pal.node);
+    var cC = new THREE.Color(pal.node2);
     var c = new THREE.Color();
 
     for (var i = 0; i < P_COUNT; i++) {
@@ -186,7 +205,7 @@
       pSpeed[i] = 0.6 + Math.pow(Math.random(), 1.7) * 3.0;
 
       var t = Math.random();
-      c.copy(t < 0.5 ? amber : gold).lerp(violet, Math.max(0, t - 0.55) * 2.2);
+      c.copy(t < 0.5 ? cA : cB).lerp(cC, Math.max(0, t - 0.55) * 2.2);
       col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
     }
 
@@ -229,7 +248,7 @@
     var lgeo = new THREE.BufferGeometry();
     lgeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(LINK_COUNT * 6), 3));
     linksMat = new THREE.LineBasicMaterial({
-      color: 0xffc94a, transparent: true, opacity: 0,
+      color: new THREE.Color(pal.node), transparent: true, opacity: 0,
       blending: THREE.AdditiveBlending, depthWrite: false
     });
     links = new THREE.LineSegments(lgeo, linksMat);
@@ -242,6 +261,7 @@
   function init(glCanvas, trailEl) {
     THREE = global.THREE;
     if (!THREE || !glCanvas) return false;
+    readPalette();
 
     try {
       renderer = new THREE.WebGLRenderer({
@@ -275,11 +295,11 @@
     keyLight.position.set(3.5, 5, 4);
     scene.add(keyLight);
 
-    amberLight = new THREE.PointLight(0xff8a1a, 0, 14, 2);
+    amberLight = new THREE.PointLight(rgbHexNum(pal.trail), 0, 14, 2);
     amberLight.position.set(-2.2, 0.6, 2.2);
     scene.add(amberLight);
 
-    violetLight = new THREE.PointLight(0x7b6bff, 0, 22, 2);
+    violetLight = new THREE.PointLight(rgbHexNum(pal.glow), 0, 22, 2);
     violetLight.position.set(3, -2, 2.5);
     scene.add(violetLight);
 
@@ -356,7 +376,7 @@
     for (var pass = 0; pass < 2; pass++) {
       var wide = pass === 0;
       trailCtx.shadowBlur = (wide ? (small ? 24 : 40) : 12) * dpr;
-      trailCtx.shadowColor = wide ? 'rgba(255,138,26,.9)' : 'rgba(255,226,168,.95)';
+      trailCtx.shadowColor = wide ? rgbCss(pal.trail, 0.9) : rgbCss(pal.glow, 0.95);
 
       for (var c = 0; c < CH; c++) {
         var a = Math.floor(n * c / CH);
@@ -366,9 +386,7 @@
         var alpha = Math.pow(f, 2.2) * (wide ? 0.26 : 0.62) * energy;
         if (alpha < 0.004) continue;
 
-        trailCtx.strokeStyle = wide
-          ? 'rgba(255,138,26,' + alpha + ')'
-          : 'rgba(255,232,186,' + alpha + ')';
+        trailCtx.strokeStyle = wide ? rgbCss(pal.trail, alpha) : rgbCss(pal.glow, alpha);
         trailCtx.lineWidth = (wide ? 30 : 7) * f * dpr * (0.45 + energy * 0.75);
 
         trailCtx.beginPath();
@@ -468,9 +486,32 @@
     return { halfW: halfH * camera.aspect, halfH: halfH };
   }
 
+  /* Re-tint after a palette or theme change, without rebuilding the scene. */
+  function refreshPalette() {
+    if (!ready) return;
+    readPalette();
+    var cA = new THREE.Color(rgbHexNum(pal.trail));
+    var cB = new THREE.Color(pal.node);
+    var cC = new THREE.Color(pal.node2);
+    var c = new THREE.Color();
+    var col = points.geometry.attributes.color.array;
+    for (var i = 0; i < P_COUNT; i++) {
+      var t = (i * 0.6180339887) % 1;                  // stable, not re-randomised
+      c.copy(t < 0.5 ? cA : cB).lerp(cC, Math.max(0, t - 0.55) * 2.2);
+      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+    }
+    points.geometry.attributes.color.needsUpdate = true;
+    pointsMat.map = sprite(); pointsMat.needsUpdate = true;
+    linksMat.color.set(pal.node);
+    bellMat.emissive.setHex(rgbHexNum(pal.trail));
+    handleMat.emissive.setHex(rgbHexNum(pal.trail));
+    amberLight.color.setHex(rgbHexNum(pal.trail));
+    violetLight.color.setHex(rgbHexNum(pal.glow));
+  }
+
   global.SwingScene = {
     init: init, update: update, resize: resize, clearTrail: clearTrail,
-    viewSize: viewSize, ARM: ARM,
+    viewSize: viewSize, ARM: ARM, refreshPalette: refreshPalette,
     isReady: function () { return ready; }
   };
 })(window);

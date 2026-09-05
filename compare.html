@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en" data-palette="wellness" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BOLD — palette comparison</title>
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='12 16 176 228'%3E%3Cpath d='M45 116.5C36 62 66 30 100 30C134 30 164 62 155 116.5A74 74 0 1 1 45 116.5Z' fill='none' stroke='%23008080' stroke-width='12'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/palettes.css">
+<script>
+(function(){ var d=document.documentElement; try{ var t=localStorage.getItem('bold:theme');
+  d.setAttribute('data-theme', (t==='light'||t==='dark')?t:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')); }catch(e){} })();
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg-body);
+  font:400 16px/1.6 var(--font-body);min-height:100vh}
+h1,h2{font-family:var(--font-display);margin:0;color:var(--fg);letter-spacing:-.02em}
+.bar{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:1rem;
+  padding:1rem clamp(1rem,3vw,2rem);background:var(--bg);border-bottom:1px solid var(--line)}
+.bar h1{font-size:1.15rem;letter-spacing:.06em}
+.bar p{margin:0;font-size:var(--fs-small);color:var(--fg-muted);max-width:38rem}
+.spacer{margin-left:auto}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:999px;overflow:hidden}
+.seg button{min-height:var(--tap);padding:0 1.1rem;border:0;background:transparent;cursor:pointer;
+  font:600 .9rem/1 var(--font-display);color:var(--fg-muted)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.seg button+button{border-left:1px solid var(--line-strong)}
+a.back{min-height:var(--tap);display:inline-flex;align-items:center;color:var(--accent);font-weight:600;text-decoration:none}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);
+  height:calc(100vh - 78px);min-height:520px}
+.cell{display:flex;flex-direction:column;background:var(--bg);min-width:0}
+.cell__head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;
+  padding:.7rem 1rem;border-bottom:1px solid var(--line)}
+.cell__name{font-family:var(--font-display);font-weight:700;font-size:.98rem;color:var(--fg)}
+.cell__mood{font-size:var(--fs-micro);color:var(--fg-muted)}
+.swatches{display:flex;gap:3px}
+.swatches i{width:16px;height:16px;border-radius:4px;border:1px solid rgba(128,128,128,.35)}
+.cell iframe{flex:1;width:100%;border:0;background:#0A0C10}
+.cell__open{padding:.6rem 1rem;border-top:1px solid var(--line);font-size:var(--fs-small)}
+.cell__open a{color:var(--accent);font-weight:600}
+@media (max-width:900px){
+  .grid{grid-template-columns:1fr;height:auto}
+  .cell iframe{height:70vh;min-height:420px}
+}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <h1>BOLD · palette comparison</h1>
+  <p>The same page in all three palettes. The intro animation stays on its dark canvas in every one — additive glow does not survive a white ground — then hands off into the palette.</p>
+  <div class="spacer"></div>
+  <div class="seg" role="group" aria-label="Theme">
+    <button type="button" id="tLight" aria-pressed="true">Light</button>
+    <button type="button" id="tDark" aria-pressed="false">Dark</button>
+  </div>
+  <a class="back" href="index.html">Open the site&nbsp;→</a>
+</div>
+
+<div class="grid">
+  <div class="cell">
+    <div class="cell__head">
+      <div><span class="cell__name">Modern Wellness</span><br><span class="cell__mood">Sophisticated, premium, clarity</span></div>
+      <div class="swatches" aria-hidden="true"><i style="background:#FFFFFF"></i><i style="background:#36454F"></i><i style="background:#9DC183"></i><i style="background:#008080"></i></div>
+    </div>
+    <iframe data-src="index.html" title="BOLD in the Modern Wellness palette" loading="lazy"></iframe>
+    <p class="cell__open"><a href="index.html">Open full page</a></p>
+  </div>
+  <div class="cell">
+    <div class="cell__head">
+      <div><span class="cell__name">Heritage Chalk</span><br><span class="cell__mood">Rugged, authoritative, grit</span></div>
+      <div class="swatches" aria-hidden="true"><i style="background:#2C3539"></i><i style="background:#E0E0E0"></i><i style="background:#A94442"></i><i style="background:#B87333"></i></div>
+    </div>
+    <iframe data-src="heritage.html" title="BOLD in the Heritage Chalk palette" loading="lazy"></iframe>
+    <p class="cell__open"><a href="heritage.html">Open full page</a></p>
+  </div>
+  <div class="cell">
+    <div class="cell__head">
+      <div><span class="cell__name">Warm Tradition</span><br><span class="cell__mood">Inviting, authentic, earthy</span></div>
+      <div class="swatches" aria-hidden="true"><i style="background:#F5EEDA"></i><i style="background:#3D2B1F"></i><i style="background:#228B22"></i><i style="background:#C5B358"></i></div>
+    </div>
+    <iframe data-src="tradition.html" title="BOLD in the Warm Tradition palette" loading="lazy"></iframe>
+    <p class="cell__open"><a href="tradition.html">Open full page</a></p>
+  </div>
+</div>
+
+<script>
+(function () {
+  var html = document.documentElement;
+  var frames = [].slice.call(document.querySelectorAll('iframe'));
+  var light = document.getElementById('tLight'), dark = document.getElementById('tDark');
+
+  function load() { frames.forEach(function (f) { f.src = f.dataset.src + '?t=' + Date.now(); }); }
+
+  function set(theme) {
+    html.setAttribute('data-theme', theme);
+    try { localStorage.setItem('bold:theme', theme); } catch (e) {}
+    light.setAttribute('aria-pressed', String(theme === 'light'));
+    dark.setAttribute('aria-pressed', String(theme === 'dark'));
+    /* the pages read the stored theme before first paint, so reloading them
+       is the honest way to show what a visitor would actually get */
+    load();
+  }
+  light.addEventListener('click', function () { set('light'); });
+  dark.addEventListener('click', function () { set('dark'); });
+
+  var cur = html.getAttribute('data-theme') || 'light';
+  light.setAttribute('aria-pressed', String(cur === 'light'));
+  dark.setAttribute('aria-pressed', String(cur === 'dark'));
+  load();
+})();
+</script>
+</body>
+</html>

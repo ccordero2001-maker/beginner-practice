@@ -1,0 +1,191 @@
+/* ============================================================
+   BOLD — palette tokens
+   Three palettes × two themes. Every component in styles.css
+   consumes ONLY the structural tokens below, so a palette is a
+   drop-in swap and nothing has to be restyled per brand.
+
+   Sources are the "Kettlebell Tradition" palette sheet. Where a
+   source colour could not carry body text at 4.5:1 it is kept for
+   fills and decoration and a darkened/brightened sibling is used
+   for text — noted inline. Ratios are stated against the token's
+   own background and verified by tools/contrast.js.
+   ============================================================ */
+
+:root{
+  /* ---- the stage stays dark in every palette and every theme.
+         Additive glow does not survive a white ground, so the swing
+         plays in its own cinema band and hands off into the page. ---- */
+  --stage-bg-legacy:#0A0C10;
+  --stage-bg-mid:#150F0A;
+  --stage-bg-bold:#0A0818;
+  --stage-fg:#F2F5F8;
+  --stage-muted:#AAB3BF;     /* 8.4:1 on --stage-bg-legacy */
+  --stage-line:#2A313C;
+
+  /* type scale — nothing below 12px anywhere on the page */
+  --fs-micro:.8125rem;   /* 13px — eyebrows, tags, pills */
+  --fs-small:.875rem;    /* 14px — captions, table tags */
+  --fs-body:1rem;
+  --tap:44px;            /* minimum interactive box */
+
+  --font-display:"Space Grotesk","Trebuchet MS","Helvetica Neue",Arial,sans-serif;
+  --font-body:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+
+/* ============================================================
+   1 · MODERN WELLNESS — minimalist & clean
+   Sophisticated, premium, focused on clarity & balance.
+   #FFFFFF · #36454F · #424242 · #9DC183 · #008080
+   ============================================================ */
+[data-palette="wellness"]{
+  --bg:#FFFFFF;
+  --bg-elev:#F7F9F9;
+  --bg-sunken:#EEF3F2;
+  --bg-invert:#10171A;
+  --fg:#36454F;            /* 9.8:1  — "polished cast iron" headlines */
+  --fg-body:#424242;       /* 9.9:1  — professional charcoal grey */
+  --fg-muted:#566A72;      /* 5.6:1  */
+  --fg-subtle:#5D6E75;     /* 4.7:1 on the sunken ground */
+  --line:#DCE4E3;
+  --line-strong:#C2CFCE;
+  --accent:#007070;        /* 5.9:1 on white, 5.2:1 on sunken — teal carries actions */
+  --accent-hover:#005C5C;
+  --accent-ink:#FFFFFF;    /* 5.9:1 on teal */
+  --accent-soft:rgba(0,112,112,.09);
+  --accent-2:#9DC183;      /* sage — fills and decoration only (2.0:1) */
+  --accent-2-ink:#456B2E;  /* 5.3:1 — sage's readable sibling */
+  --accent-3:#36454F;
+  --focus:#008080;
+  --shadow:20 40 44;
+  --swing-trail:0,150,150;
+  --swing-glow:157,193,131;
+  --swing-node:#4FC3C3;
+  --swing-node-2:#9DC183;
+}
+[data-palette="wellness"][data-theme="dark"]{
+  --bg:#10171A;
+  --bg-elev:#182226;
+  --bg-sunken:#0A1013;
+  --bg-invert:#FFFFFF;
+  --fg:#EAF1F1;            /* 14.6:1 */
+  --fg-body:#DCE6E6;
+  --fg-muted:#A9BCC0;      /* 9.2:1  */
+  --fg-subtle:#8399A0;     /* 6.0:1  */
+  --line:#253237;
+  --line-strong:#35464C;
+  --accent:#2FB3B3;        /* 7.1:1  */
+  --accent-hover:#4FC9C9;
+  --accent-ink:#06191B;    /* 7.2:1 on the brightened teal */
+  --accent-soft:rgba(47,179,179,.14);
+  --accent-2:#9DC183;      /* 9.0:1 on this ground — safe as text here */
+  --accent-2-ink:#B6D6A0;
+  --accent-3:#7FA8BC;
+  --focus:#4FC9C9;
+  --shadow:0 0 0;
+}
+
+/* ============================================================
+   2 · HERITAGE CHALK — industrial & classic
+   Rugged, authoritative, grounded in grit.
+   #2C3539 · #E0E0E0 · #A94442 · #B87333 · #C0C0C0
+   ============================================================ */
+[data-palette="heritage"]{
+  --bg:#ECEEEE;            /* chalk ground */
+  --bg-elev:#F8F9F9;
+  --bg-sunken:#DFE3E3;
+  --bg-invert:#1B2124;
+  --fg:#2C3539;            /* 10.1:1 — deep slate charcoal */
+  --fg-body:#333D41;
+  --fg-muted:#4E585C;      /* 5.9:1  */
+  --fg-subtle:#566266;     /* 4.8:1 on the sunken ground */
+  --line:#CFD5D5;
+  --line-strong:#B4BDBD;
+  --accent:#A94442;        /* 4.8:1 — industrial rust red */
+  --accent-hover:#8E3634;
+  --accent-ink:#FFFFFF;    /* 5.8:1 on rust */
+  --accent-soft:rgba(169,68,66,.09);
+  --accent-2:#B87333;      /* copper — fills (3.3:1), not body text */
+  --accent-2-ink:#8A5522;  /* 5.0:1 — copper's readable sibling */
+  --accent-3:#566266;
+  --focus:#A94442;
+  --shadow:30 34 36;
+  --swing-trail:184,115,51;
+  --swing-glow:169,68,66;
+  --swing-node:#D89A5C;
+  --swing-node-2:#C0C0C0;
+}
+[data-palette="heritage"][data-theme="dark"]{
+  --bg:#1B2124;
+  --bg-elev:#2C3539;       /* the palette's own slate, as the card ground */
+  --bg-sunken:#141A1C;
+  --bg-invert:#ECEEEE;
+  --fg:#E0E0E0;            /* 12.3:1 — chalk dust white */
+  --fg-body:#D4D6D6;
+  --fg-muted:#ADB4B6;      /* 7.7:1  */
+  --fg-subtle:#9BA3A6;     /* 4.8:1 on the slate card ground */
+  --line:#384246;
+  --line-strong:#4A5559;
+  --accent:#D4924F;        /* 4.7:1 on slate cards — copper lifted to carry text */
+  --accent-hover:#E3A566;
+  --accent-ink:#17110A;    /* 7.1:1 */
+  --accent-soft:rgba(212,146,79,.15);
+  --accent-2:#E08582;      /* 4.6:1 — rust lifted for dark grounds */
+  --accent-2-ink:#E9A29F;
+  --accent-3:#C0C0C0;      /* 8.9:1 — silver */
+  --focus:#E3A566;
+  --shadow:0 0 0;
+}
+
+/* ============================================================
+   3 · WARM TRADITION — vintage & earthy
+   Inviting, authentic, rooted in natural strength.
+   #F5EEDA · #8C7B68 · #3D2B1F · #228B22 · #C5B358
+   ============================================================ */
+[data-palette="tradition"]{
+  --bg:#F5EEDA;            /* cream */
+  --bg-elev:#FBF7EC;
+  --bg-sunken:#EDE3C9;
+  --bg-invert:#17110C;
+  --fg:#3D2B1F;            /* 11.5:1 — dark chocolate brown */
+  --fg-body:#463327;
+  --fg-muted:#6B5744;      /* 5.9:1  */
+  --fg-subtle:#71604D;     /* 4.7:1 on the sunken ground */
+  --line:#DFD3B8;
+  --line-strong:#C9BA98;
+  --accent:#1B6F1B;        /* 5.4:1 — forest green, darkened to carry text */
+  --accent-hover:#155715;
+  --accent-ink:#FFFFFF;    /* 6.3:1 */
+  --accent-soft:rgba(34,139,34,.10);
+  --accent-bright:#228B22; /* the source green, for large fills */
+  --accent-2:#C5B358;      /* burnished gold — decoration only (1.8:1) */
+  --accent-2-ink:#6E6019;  /* 4.9:1 — gold's readable sibling */
+  --accent-3:#6B5A47;      /* 5.7:1 — taupe darkened so it can carry text */
+  --focus:#1B6F1B;
+  --shadow:40 32 22;
+  --swing-trail:197,179,88;
+  --swing-glow:34,139,34;
+  --swing-node:#D8C978;
+  --swing-node-2:#5FBF5F;
+}
+[data-palette="tradition"][data-theme="dark"]{
+  --bg:#17110C;
+  --bg-elev:#221A12;
+  --bg-sunken:#0E0A07;
+  --bg-invert:#F5EEDA;
+  --fg:#F5EEDA;            /* 16.2:1 */
+  --fg-body:#EADFC6;
+  --fg-muted:#C9B99E;      /* 9.7:1  */
+  --fg-subtle:#9C8A73;     /* 5.6:1  */
+  --line:#38291C;
+  --line-strong:#4C3826;
+  --accent:#3FA83F;        /* 6.2:1 — forest green lifted for dark */
+  --accent-hover:#59C059;
+  --accent-ink:#0B1A0B;
+  --accent-soft:rgba(63,168,63,.16);
+  --accent-bright:#4FBF4F;
+  --accent-2:#C5B358;      /* 8.9:1 here — gold finally works as text */
+  --accent-2-ink:#D8C978;
+  --accent-3:#A08D74;
+  --focus:#59C059;
+  --shadow:0 0 0;
+}
