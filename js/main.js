@@ -161,8 +161,32 @@
   var cta = document.getElementById('exploreCta');
 
   var running = false, rafId = 0, booted = false;
-  var angle = 0, angVel = 0, lastY = pageYOffset, lastT = 0, energy = 0;
+  var angle = 0, angVel = 0, lastY = pageYOffset, lastT = 0, energy = 0, smoothDScroll = 0;
   var restAnchor = { x: 0, y: 0 }, restScale = 0.62, framed = false;
+
+  /* Closed-form step for a damped harmonic oscillator: x'' + c*x' + k*x = 0,
+     where x = angle - target (target held fixed over the step). This
+     replaces the old semi-implicit Euler update (angVel += ...*dt), which
+     can ring or blow up when dt spikes on a dropped frame or a fast flick.
+     The analytic solution is exact and stable for any dt, so the swing
+     settles the same way regardless of frame rate. */
+  function springStep(x0, v0, k, c, dt) {
+    var alpha = c / 2;
+    var wd2 = k - alpha * alpha;
+    var decay = Math.exp(-alpha * dt);
+    if (wd2 <= 1e-6) {
+      /* critically/over-damped fallback; not hit with this k/c, kept for safety */
+      var b = v0 + alpha * x0;
+      return { x: decay * (x0 + b * dt), v: decay * (b - alpha * (x0 + b * dt)) };
+    }
+    var wd = Math.sqrt(wd2);
+    var A = x0, B = (v0 + alpha * x0) / wd;
+    var cosW = Math.cos(wd * dt), sinW = Math.sin(wd * dt);
+    return {
+      x: decay * (A * cosW + B * sinW),
+      v: decay * ((-alpha * A + B * wd) * cosW + (-alpha * B - A * wd) * sinW)
+    };
+  }
 
   function stageProgress() {
     if (!stage) return 0;
@@ -269,10 +293,17 @@
 
     var target = targetAngle(p);
     var k = 26 + p * 22;
-    angVel += (target - angle) * k * dt - angVel * 5.4 * dt;
-    angVel += dScroll * 0.0010;
+
+    /* smooth the raw scroll delta before it drives the spring — native
+       wheel/trackpad deltas arrive in noisy, uneven bursts, and feeding
+       that straight into angular velocity is what made the swing feel
+       jittery rather than heavy */
+    smoothDScroll += (dScroll - smoothDScroll) * Math.min(1, dt * 24);
+
+    var step = springStep(angle - target, angVel, k, 5.4, dt);
+    angle = target + step.x;
+    angVel = step.v + smoothDScroll * 0.0010;
     angVel = clamp(angVel, -14, 14);
-    angle += angVel * dt;
 
     /* speed rides on top of a floor that lasts the whole swing, so a slow
        scroller still sees the arc */
