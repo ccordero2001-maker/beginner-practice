@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="en" data-motion="full" data-phase="legacy">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BOLD — The Arc of Power</title>
+<meta name="description" content="Grounded in Strength. Driven by Data. BOLD is hybrid human coaching plus a dedicated app — for individuals, athletes, executives and enterprise teams.">
+<meta name="color-scheme" content="dark">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<a class="skip-link" href="#ecosystem">Skip the animated intro</a>
+
+<!-- ============================================================
+     NAV
+     ============================================================ -->
+<header class="nav" id="nav">
+  <a class="nav__brand" href="#top" aria-label="BOLD home">
+    <svg class="nav__glyph" viewBox="24 28 152 214" aria-hidden="true" focusable="false">
+      <path d="M45 116.5C36 62 66 30 100 30C134 30 164 62 155 116.5A74 74 0 1 1 45 116.5Z" fill="none" stroke="currentColor" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="nav__word">BOLD</span>
+  </a>
+
+  <nav class="nav__links" aria-label="Primary">
+    <a href="#personal">Personal</a>
+    <a href="#corporate">Corporate</a>
+    <a href="#app">App</a>
+    <a href="#matrix">Approach</a>
+  </nav>
+
+  <div class="nav__actions">
+    <button type="button" class="motion-toggle" id="motionToggle" aria-pressed="true">
+      <span class="motion-toggle__dot" aria-hidden="true"></span>
+      <span class="motion-toggle__label">Motion</span>
+    </button>
+    <a class="btn btn--ghost nav__cta" href="#contact">Book a session</a>
+  </div>
+</header>
+
+<!-- ============================================================
+     THE ARC OF POWER — animated stage (Phases 1 → 2 → 3)
+     Scroll-scrubbed. Replaced by #stage-static in reduced motion.
+     ============================================================ -->
+<section class="stage" id="stage" aria-label="The Arc of Power introduction">
+  <div class="stage__sticky">
+    <div class="stage__tilt" id="stageTilt">
+
+      <canvas class="stage__gl" id="gl" aria-hidden="true"></canvas>
+      <canvas class="stage__trail" id="trail" aria-hidden="true"></canvas>
+
+      <!-- PHASE 1 · the heritage mark: 2D outlined kettlebell -->
+      <svg class="legacy-mark" id="legacyMark" viewBox="24 28 152 214" aria-hidden="true" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M45 116.5C36 62 66 30 100 30C134 30 164 62 155 116.5A74 74 0 1 1 45 116.5Z"/>
+          <path d="M70 98.4C64 68 80 52 100 52C120 52 136 68 130 98.4A74 74 0 0 0 70 98.4Z"/>
+        </g>
+      </svg>
+
+      <div class="stage__layer stage__layer--hero" id="heroCopy">
+        <p class="eyebrow">
+          <!-- DEMO COPY: founding year + city are placeholders, not verified facts. -->
+          Est. 2014 · San José, Costa Rica
+        </p>
+        <h1 class="hero__title">Grounded in Strength.<br><em>Driven by Data.</em></h1>
+        <p class="hero__sub">
+          A decade of iron, distilled into a system. BOLD keeps the discipline of
+          traditional strength coaching and gives it instrumentation — for the person
+          on the platform and the company behind them.
+        </p>
+        <div class="hero__actions">
+          <a class="btn btn--primary" href="#ecosystem" id="exploreCta">Explore BOLD</a>
+          <a class="btn btn--ghost" href="#matrix">See the evolution</a>
+        </div>
+        <p class="scroll-cue" aria-hidden="true"><span></span>Scroll to swing</p>
+      </div>
+
+      <!-- PHASE 2 + 3 · copywriting hooks, scrubbed by scroll position -->
+      <div class="stage__layer stage__layer--hooks" aria-hidden="true">
+        <p class="hook" data-hook="0">Every motion begins with momentum.</p>
+        <p class="hook" data-hook="1">Iron built the foundation.<br>Intelligence scales the results.</p>
+        <p class="hook" data-hook="2">From a single bell to a complete ecosystem.<br><strong>Welcome to BOLD.</strong></p>
+      </div>
+
+      <div class="stage__wipe" id="stageWipe" aria-hidden="true"></div>
+
+      <!-- PHASE 3 · the energy path splits into three streams -->
+      <svg class="streams" id="streams" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="streamGrad" x1="0.5" y1="0" x2="0.5" y2="1">
+            <stop offset="0" stop-color="#ffd24a"/>
+            <stop offset="0.45" stop-color="#ff9a1f"/>
+            <stop offset="1" stop-color="#7b6bff"/>
+          </linearGradient>
+        </defs>
+        <g fill="none" stroke="url(#streamGrad)" stroke-width="2.5" stroke-linecap="round" vector-effect="non-scaling-stroke">
+          <path class="streams__path" pathLength="1" d="M560 300C560 540 300 640 150 980"/>
+          <path class="streams__path" pathLength="1" d="M560 300C560 580 500 720 505 995"/>
+          <path class="streams__path" pathLength="1" d="M560 300C560 540 800 640 855 980"/>
+        </g>
+      </svg>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     REDUCED-MOTION TWIN — a composed static telling of the same
+     three phases. Not "animation off": its own layout.
+     ============================================================ -->
+<section class="static-stage" id="stage-static" aria-label="The Arc of Power">
+  <div class="wrap">
+    <p class="eyebrow">
+      <!-- DEMO COPY: founding year + city are placeholders. -->
+      Est. 2014 · San José, Costa Rica
+    </p>
+    <h1 class="hero__title hero__title--static">Grounded in Strength. <em>Driven by Data.</em></h1>
+    <p class="hero__sub">
+      A decade of iron, distilled into a system. BOLD keeps the discipline of
+      traditional strength coaching and gives it instrumentation — for the person
+      on the platform and the company behind them.
+    </p>
+    <div class="hero__actions">
+      <a class="btn btn--primary" href="#ecosystem">Explore BOLD</a>
+      <a class="btn btn--ghost" href="#matrix">See the evolution</a>
+    </div>
+
+    <ol class="phases">
+      <li class="phase phase--1">
+        <div class="phase__art">
+          <svg viewBox="24 28 152 214" aria-hidden="true">
+            <g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M45 116.5C36 62 66 30 100 30C134 30 164 62 155 116.5A74 74 0 1 1 45 116.5Z"/><path d="M70 98.4C64 68 80 52 100 52C120 52 136 68 130 98.4A74 74 0 0 0 70 98.4Z"/>
+            </g>
+          </svg>
+        </div>
+        <p class="phase__step">Phase 01 · Foundation</p>
+        <h2 class="phase__title">The outlined bell</h2>
+        <p class="phase__body">One mark. Raw physical strength, foundational work, nothing decorative. This is where the practice starts and what everything after it is measured against.</p>
+        <p class="phase__hook">“Every motion begins with momentum.”</p>
+      </li>
+
+      <li class="phase phase--2">
+        <div class="phase__art">
+          <svg viewBox="0 0 260 240" aria-hidden="true">
+            <path d="M34 214C34 118 96 42 186 34" fill="none" stroke="var(--amber)" stroke-width="3" stroke-linecap="round" stroke-dasharray="1 9"/>
+            <path d="M34 214C34 130 88 58 170 44" fill="none" stroke="var(--amber)" stroke-width="14" stroke-linecap="round" opacity=".18"/>
+            <g transform="translate(132 4) scale(.38)" fill="none" stroke="var(--gold)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M45 116.5C36 62 66 30 100 30C134 30 164 62 155 116.5A74 74 0 1 1 45 116.5Z"/><path d="M70 98.4C64 68 80 52 100 52C120 52 136 68 130 98.4A74 74 0 0 0 70 98.4Z"/>
+            </g>
+          </svg>
+        </div>
+        <p class="phase__step">Phase 02 · The swing</p>
+        <h2 class="phase__title">Momentum, traced</h2>
+        <p class="phase__body">The bell takes on mass, depth and a path. The arc it burns into the screen is the energy transfer itself — load, drive, float, return.</p>
+        <p class="phase__hook">“Iron built the foundation. Intelligence scales the results.”</p>
+      </li>
+
+      <li class="phase phase--3">
+        <div class="phase__art">
+          <svg viewBox="40 48 180 176" aria-hidden="true">
+            <g stroke="var(--gold)" stroke-width="1.2" opacity=".55">
+              <path d="M60 120 128 74M128 74 196 118M60 120 96 176M96 176 168 168M168 168 196 118M128 74 132 132M132 132 96 176M132 132 168 168" fill="none"/>
+            </g>
+            <g fill="var(--gold)">
+              <circle cx="128" cy="74" r="6"/><circle cx="60" cy="120" r="4"/>
+              <circle cx="196" cy="118" r="4.5"/><circle cx="96" cy="176" r="5"/>
+              <circle cx="168" cy="168" r="4"/><circle cx="132" cy="132" r="7"/>
+            </g>
+            <g fill="var(--violet)">
+              <circle cx="84" cy="58" r="2.5"/><circle cx="212" cy="76" r="2"/>
+              <circle cx="48" cy="184" r="2.5"/><circle cx="206" cy="196" r="3"/>
+              <circle cx="150" cy="212" r="2"/>
+            </g>
+          </svg>
+        </div>
+        <p class="phase__step">Phase 03 · Impact</p>
+        <h2 class="phase__title">Iron becomes intelligence</h2>
+        <p class="phase__body">At peak elevation the bell resolves into data — reps, loads, recovery, adherence — and splits into three streams: personal coaching, corporate wellness, and the app that holds both.</p>
+        <p class="phase__hook">“From a single bell to a complete ecosystem. Welcome to BOLD.”</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============================================================
+     THE NEW HORIZON — modern ecosystem
+     ============================================================ -->
+<main id="ecosystem">
+
+  <section class="pillars" aria-labelledby="pillars-title">
+    <div class="wrap">
+      <header class="section-head">
+        <p class="eyebrow">The ecosystem</p>
+        <h2 class="section-title" id="pillars-title">Three streams. One system of record.</h2>
+        <p class="section-sub">The swing lands here. Human coaching where it changes behaviour, software where it compounds.</p>
+      </header>
+
+      <div class="pillars__grid">
+
+        <!-- ---------- B2C ---------- -->
+        <article class="pillar pillar--b2c" id="personal">
+          <div class="pillar__tag">B2C · Personal Training</div>
+          <h3 class="pillar__title">One-on-one, engineered.</h3>
+          <p class="pillar__body">
+            A dedicated coach, a periodised block, and a number attached to every claim.
+            You keep the barbell and the bell — you lose the guesswork about whether it worked.
+          </p>
+
+          <!-- DEMO DATA: the figures in this transformation card are fabricated for layout. -->
+          <div class="transform-card" data-demo-copy="true">
+            <div class="transform-card__head">
+              <span>12-week block · sample client</span>
+              <span class="pill pill--gold">+11.4% strength</span>
+            </div>
+            <div class="bars">
+              <div class="bar"><span class="bar__label">Trap-bar deadlift</span><span class="bar__val">142 → 165 kg</span><span class="bar__track"><i style="--w:78%"></i></span></div>
+              <div class="bar"><span class="bar__label">Swing volume</span><span class="bar__val">+2,400 reps</span><span class="bar__track"><i style="--w:64%"></i></span></div>
+              <div class="bar"><span class="bar__label">Session adherence</span><span class="bar__val">91%</span><span class="bar__track"><i style="--w:91%"></i></span></div>
+              <div class="bar"><span class="bar__label">Resting HR</span><span class="bar__val">64 → 57 bpm</span><span class="bar__track"><i style="--w:47%"></i></span></div>
+            </div>
+          </div>
+
+          <ul class="ticks">
+            <li>Weekly 1-on-1, in person or remote</li>
+            <li>Programming rebuilt every block from your own logs</li>
+            <li>Nutrition and recovery handled by the same coach</li>
+            <li>Movement screen and re-test every 12 weeks</li>
+          </ul>
+          <a class="link-arrow" href="#contact">Start with an assessment</a>
+        </article>
+
+        <!-- ---------- B2B ---------- -->
+        <article class="pillar pillar--b2b" id="corporate">
+          <div class="pillar__tag">B2B · Corporate Wellness</div>
+          <h3 class="pillar__title">Culture you can measure.</h3>
+          <p class="pillar__body">
+            Programs that scale across sites and shifts, with a reporting layer your
+            People team can actually take to a board meeting. Individual data stays private;
+            you see the aggregate.
+          </p>
+
+          <!-- DEMO DATA: every metric in this dashboard mock is fabricated for layout. -->
+          <div class="dash" data-demo-copy="true">
+            <div class="dash__head">
+              <span class="dash__title">Team health · Q3</span>
+              <span class="pill">Northwind Logistics</span>
+            </div>
+            <div class="dash__grid">
+              <div class="stat"><span class="stat__num">312</span><span class="stat__lab">Enrolled</span></div>
+              <div class="stat"><span class="stat__num">74%</span><span class="stat__lab">Weekly active</span></div>
+              <div class="stat"><span class="stat__num">−18%</span><span class="stat__lab">Sick days</span></div>
+              <div class="stat"><span class="stat__num">8.4</span><span class="stat__lab">Culture score</span></div>
+            </div>
+            <div class="spark" aria-hidden="true">
+              <svg viewBox="0 0 300 64" preserveAspectRatio="none">
+                <path d="M0 50 L30 46 L60 48 L90 38 L120 40 L150 30 L180 26 L210 28 L240 18 L270 14 L300 8"
+                      fill="none" stroke="var(--gold)" stroke-width="2"/>
+                <path d="M0 50 L30 46 L60 48 L90 38 L120 40 L150 30 L180 26 L210 28 L240 18 L270 14 L300 8 L300 64 L0 64Z"
+                      fill="url(#sparkFill)" opacity=".22"/>
+                <defs><linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#ffd24a"/><stop offset="1" stop-color="#ffd24a" stop-opacity="0"/>
+                </linearGradient></defs>
+              </svg>
+            </div>
+          </div>
+
+          <ul class="ticks">
+            <li>On-site and hybrid programming, 20–5,000 people</li>
+            <li>Aggregate dashboards — no individual health data exposed</li>
+            <li>Executive performance track for leadership teams</li>
+            <li>SSO, invoicing and a named account coach</li>
+          </ul>
+          <a class="link-arrow" href="#contact">Request the enterprise brief</a>
+        </article>
+
+        <!-- ---------- APP ---------- -->
+        <article class="pillar pillar--app" id="app">
+          <div class="pillar__tag">Product · The BOLD App</div>
+          <h3 class="pillar__title">The coach, in your pocket.</h3>
+          <p class="pillar__body">
+            Live tracking, the session your coach wrote for today, and a message thread
+            with the human who wrote it. Same account whether you came in as an
+            individual or through your employer.
+          </p>
+
+          <!-- DEMO DATA: the app preview shows fabricated sessions, metrics and messages. -->
+          <div class="phone" data-demo-copy="true" aria-label="BOLD app preview">
+            <div class="phone__glass">
+              <div class="phone__bar"><span>9:41</span><span class="phone__dots" aria-hidden="true"></span></div>
+              <p class="phone__greet">Today · Block 3, Day 2</p>
+              <h4 class="phone__session">Posterior chain + swings</h4>
+              <div class="rings">
+                <div class="ring" style="--p:.82"><span>82%</span><small>Load</small></div>
+                <div class="ring ring--alt" style="--p:.64"><span>64%</span><small>Recovery</small></div>
+                <div class="ring ring--third" style="--p:.93"><span>93%</span><small>Adherence</small></div>
+              </div>
+              <ul class="phone__list">
+                <li><span>Trap-bar deadlift</span><span>5 × 3 @ 150</span></li>
+                <li><span>KB swing</span><span>6 × 12 @ 32</span></li>
+                <li><span>Split squat</span><span>3 × 8 / side</span></li>
+              </ul>
+              <div class="phone__msg">
+                <span class="avatar" aria-hidden="true">DR</span>
+                <p>“Bar speed dropped on set 4 last week — cap it at 150 today and we push Thursday.”</p>
+              </div>
+            </div>
+          </div>
+
+          <ul class="ticks">
+            <li>Offline-first logging, syncs when you resurface</li>
+            <li>Wearable import: heart rate, sleep, steps</li>
+            <li>Direct coach messaging and form-check video</li>
+            <li>iOS and Android</li>
+          </ul>
+          <a class="link-arrow" href="#contact">Join the beta list</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- METRICS BAND ---------- -->
+  <!-- DEMO DATA: all four figures below are fabricated placeholders. -->
+  <section class="metrics" aria-label="BOLD by the numbers" data-demo-copy="true">
+    <div class="wrap metrics__grid">
+      <div class="metric"><span class="metric__num" data-count="12">12</span><span class="metric__lab">Years under the bell</span></div>
+      <div class="metric"><span class="metric__num" data-count="2400">2,400+</span><span class="metric__lab">Coached clients</span></div>
+      <div class="metric"><span class="metric__num" data-count="38">38</span><span class="metric__lab">Enterprise programs</span></div>
+      <div class="metric"><span class="metric__num" data-count="91">91%</span><span class="metric__lab">12-week retention</span></div>
+    </div>
+  </section>
+
+  <!-- ---------- POSITIONING MATRIX ---------- -->
+  <section class="matrix" id="matrix" aria-labelledby="matrix-title">
+    <div class="wrap">
+      <header class="section-head">
+        <p class="eyebrow">Strategic positioning</p>
+        <h2 class="section-title" id="matrix-title">What changed, and what didn’t.</h2>
+        <p class="section-sub">The heritage mark isn’t retired. It’s the load-bearing wall.</p>
+      </header>
+
+      <div class="matrix__scroll">
+        <table class="matrix__table">
+          <caption class="sr-only">Legacy positioning compared with the BOLD platform</caption>
+          <thead>
+            <tr>
+              <th scope="col">Element</th>
+              <th scope="col"><span class="col-tag col-tag--legacy">Legacy</span> The outlined kettlebell</th>
+              <th scope="col"><span class="col-tag col-tag--bold">Evolution</span> The BOLD platform</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Focus</th>
+              <td>Raw physical strength &amp; foundational workouts</td>
+              <td>Holistic wellness, aesthetics &amp; peak performance</td>
+            </tr>
+            <tr>
+              <th scope="row">Delivery</th>
+              <td>Traditional 1-on-1 training</td>
+              <td>Hybrid human coaching + dedicated mobile app experience</td>
+            </tr>
+            <tr>
+              <th scope="row">Audience</th>
+              <td>Individual fitness enthusiasts (B2C)</td>
+              <td>Athletes, executives and enterprise teams (B2B + B2C)</td>
+            </tr>
+            <tr>
+              <th scope="row">Vibe</th>
+              <td>Gritty, analog, essential</td>
+              <td>Executive, premium, tech-enabled, sleek</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- TESTIMONIALS ---------- -->
+  <!-- DEMO DATA: all three quotes, names, roles and companies below are fabricated.
+       They are sample copy for layout only and must be replaced with real,
+       permissioned testimonials before this page is published. -->
+  <section class="voices" aria-labelledby="voices-title" data-demo-copy="true">
+    <div class="wrap">
+      <header class="section-head">
+        <p class="eyebrow">Sample testimonials</p>
+        <h2 class="section-title" id="voices-title">What the work sounds like.</h2>
+      </header>
+      <div class="voices__grid">
+        <figure class="voice">
+          <blockquote>“I’d trained for nine years and never once seen my own numbers laid out. The bell didn’t change. The clarity did.”</blockquote>
+          <figcaption><strong>Elena Márquez</strong><span>Client since 2019</span></figcaption>
+        </figure>
+        <figure class="voice">
+          <blockquote>“We rolled it out across three warehouses. The aggregate reporting is what got it past our CFO — not the workouts.”</blockquote>
+          <figcaption><strong>Tobias Lund</strong><span>Head of People, Northwind Logistics</span></figcaption>
+        </figure>
+        <figure class="voice">
+          <blockquote>“Executive schedules break normal programs. This one rebuilt itself around a week I kept blowing up.”</blockquote>
+          <figcaption><strong>Priya Raghunathan</strong><span>COO, Halcyon Group</span></figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- PRICING ---------- -->
+  <!-- DEMO DATA: every price, inclusion and seat count below is fabricated. -->
+  <section class="plans" id="plans" aria-labelledby="plans-title" data-demo-copy="true">
+    <div class="wrap">
+      <header class="section-head">
+        <p class="eyebrow">Sample pricing</p>
+        <h2 class="section-title" id="plans-title">Pick your entry point.</h2>
+        <p class="section-sub">Placeholder figures — commercial terms to be confirmed.</p>
+      </header>
+      <div class="plans__grid">
+        <article class="plan">
+          <h3 class="plan__name">Foundation</h3>
+          <p class="plan__price">$149<span>/month</span></p>
+          <p class="plan__note">App-led, coach-reviewed.</p>
+          <ul class="ticks">
+            <li>Programming refreshed monthly</li>
+            <li>Full app access + wearable sync</li>
+            <li>Async coach review, 2× per month</li>
+          </ul>
+          <a class="btn btn--ghost btn--block" href="#contact">Start</a>
+        </article>
+        <article class="plan plan--featured">
+          <span class="plan__flag">Most chosen</span>
+          <h3 class="plan__name">Hybrid</h3>
+          <p class="plan__price">$420<span>/month</span></p>
+          <p class="plan__note">The full BOLD method.</p>
+          <ul class="ticks">
+            <li>Weekly 1-on-1 with a named coach</li>
+            <li>Block periodisation rebuilt from your logs</li>
+            <li>Nutrition, recovery and re-testing</li>
+            <li>Direct messaging, same-day replies</li>
+          </ul>
+          <a class="btn btn--primary btn--block" href="#contact">Book an assessment</a>
+        </article>
+        <article class="plan">
+          <h3 class="plan__name">Enterprise</h3>
+          <p class="plan__price">Custom</p>
+          <p class="plan__note">20 to 5,000 seats.</p>
+          <ul class="ticks">
+            <li>On-site and hybrid delivery</li>
+            <li>Aggregate culture-health reporting</li>
+            <li>Executive performance track</li>
+            <li>SSO, invoicing, named account coach</li>
+          </ul>
+          <a class="btn btn--ghost btn--block" href="#contact">Talk to us</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- CTA ---------- -->
+  <section class="cta" id="contact" aria-labelledby="cta-title">
+    <div class="wrap cta__inner">
+      <h2 class="cta__title" id="cta-title">From a single bell to a complete ecosystem.</h2>
+      <p class="cta__sub">Tell us where you’re starting and we’ll tell you what the first twelve weeks look like.</p>
+      <form class="cta__form" id="ctaForm" novalidate>
+        <label class="sr-only" for="email">Email address</label>
+        <input id="email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@company.com" required>
+        <label class="sr-only" for="track">I'm interested in</label>
+        <select id="track" name="track">
+          <option value="b2c">Personal training</option>
+          <option value="b2b">Corporate wellness</option>
+          <option value="app">The BOLD app</option>
+        </select>
+        <button class="btn btn--primary" type="submit">Request the brief</button>
+      </form>
+      <p class="cta__status" id="ctaStatus" role="status"></p>
+      <!-- NOTE: this form is a front-end demo only — it is not wired to any backend. -->
+    </div>
+  </section>
+
+  <footer class="foot">
+    <div class="wrap foot__inner">
+      <div class="foot__brand">
+        <svg class="nav__glyph" viewBox="24 28 152 214" aria-hidden="true">
+          <path d="M45 116.5C36 62 66 30 100 30C134 30 164 62 155 116.5A74 74 0 1 1 45 116.5Z" fill="none" stroke="currentColor" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>BOLD</span>
+      </div>
+      <nav class="foot__links" aria-label="Footer">
+        <a href="#personal">Personal</a><a href="#corporate">Corporate</a>
+        <a href="#app">App</a><a href="#plans">Pricing</a><a href="#matrix">Approach</a>
+      </nav>
+      <p class="foot__note">
+        <strong>Demo build.</strong> Metrics, testimonials, client names and prices on this
+        page are sample content for layout purposes and are not real. Replace before publishing.
+      </p>
+    </div>
+  </footer>
+</main>
+
+<!-- three.js r128, vendored locally: no CDN dependency, page works offline.
+     Licence in js/vendor/THREE-LICENSE.txt -->
+<script src="js/vendor/three.min.js"></script>
+<script src="js/swing-scene.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

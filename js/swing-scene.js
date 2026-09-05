@@ -1,0 +1,476 @@
+/* ============================================================
+   BOLD — swing-scene.js
+   The 3D half of "The Arc of Power".
+
+   Owns: the metallic kettlebell (real lathe + tube geometry),
+   a procedural studio environment map, the projected 2D glow
+   trail, and the data-node particle burst.
+
+   Everything is DETERMINISTIC in the state it is handed, so the
+   whole sequence scrubs cleanly backwards as well as forwards.
+   ============================================================ */
+(function (global) {
+  'use strict';
+
+  var THREE = null;   // resolved in init(), so a blocked CDN degrades quietly
+
+  /* ---------- tunables ---------- */
+  var ARM       = 3.2;   // pendulum arm, world units
+  var BASE_SCALE= 0.36;  // fallback; main.js locks this to the 2D mark's on-screen size
+  var P_COUNT   = 1100;  // data nodes
+  var LINK_COUNT= 150;   // constellation segments
+  var TRAIL_MAX = 130;   // projected trail samples
+
+  var scene, camera, renderer, pivot, bell, bellMat, handleMat;
+  var keyLight, amberLight, violetLight;
+  var points, pointsMat, links, linksMat;
+  var pAttr, pOrigin, pDir, pSpeed, lPairs;
+  var trailCtx, trailCanvas, trail = [];
+  var burstOrigin = null, tmp = null;   // built in init(); THREE may not exist yet
+  var ready = false;
+  var dpr = 1;
+
+  /* ------------------------------------------------------------
+     Procedural environment: six painted canvas faces. Gives the
+     metal something to reflect without shipping an HDR file.
+     ------------------------------------------------------------ */
+  function faceCanvas(paint) {
+    var c = document.createElement('canvas');
+    c.width = c.height = 128;
+    paint(c.getContext('2d'), 128);
+    return c;
+  }
+
+  function buildEnvMap() {
+    function base(ctx, s, top, bottom) {
+      var g = ctx.createLinearGradient(0, 0, 0, s);
+      g.addColorStop(0, top);
+      g.addColorStop(1, bottom);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, s, s);
+    }
+    function bar(ctx, x, y, w, h, color, blur) {
+      ctx.save();
+      ctx.filter = 'blur(' + blur + 'px)';
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, w, h);
+      ctx.restore();
+    }
+
+    var faces = [
+      // +X : the key strip. This is the highlight that rakes the bell.
+      faceCanvas(function (c, s) { base(c, s, '#2a2f3a', '#090b0f'); bar(c, s * 0.55, s * 0.1, s * 0.16, s * 0.8, '#ffffff', 9); }),
+      // -X : cool fill
+      faceCanvas(function (c, s) { base(c, s, '#181d27', '#070809'); bar(c, s * 0.2, s * 0.25, s * 0.1, s * 0.5, '#8fa0ff', 12); }),
+      // +Y : soft overhead box light
+      faceCanvas(function (c, s) { base(c, s, '#262b34', '#161a21'); bar(c, s * 0.22, s * 0.22, s * 0.56, s * 0.56, '#c9cfda', 14); }),
+      // -Y : floor bounce
+      faceCanvas(function (c, s) { base(c, s, '#0b0d11', '#050608'); }),
+      // +Z : warm kicker — the amber of the arc
+      faceCanvas(function (c, s) { base(c, s, '#191512', '#08090b'); bar(c, s * 0.1, s * 0.6, s * 0.8, s * 0.14, '#7e4a14', 13); }),
+      // -Z : gold rim
+      faceCanvas(function (c, s) { base(c, s, '#14141c', '#07070a'); bar(c, s * 0.3, s * 0.05, s * 0.4, s * 0.12, '#7d6a26', 11); })
+    ];
+
+    var env = new THREE.CubeTexture(faces);
+    env.needsUpdate = true;
+    if ('sRGBEncoding' in THREE) env.encoding = THREE.sRGBEncoding;
+    return env;
+  }
+
+  /* Cast-iron micro-texture, so the metal isn't a mirror-smooth blob. */
+  function buildBumpMap() {
+    var c = document.createElement('canvas');
+    c.width = c.height = 256;
+    var ctx = c.getContext('2d');
+    var img = ctx.createImageData(256, 256);
+    for (var i = 0; i < img.data.length; i += 4) {
+      var v = 128 + (Math.random() - 0.5) * 90;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+      img.data[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    var t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(4, 4);
+    return t;
+  }
+
+  /* ------------------------------------------------------------
+     The bell itself: a lathed cast body plus a swept-tube handle.
+     ------------------------------------------------------------ */
+  function buildKettlebell(env, bump) {
+    var group = new THREE.Group();
+
+    /* Proportions follow the 2D heritage mark: body as tall as it is wide,
+       handle rising ~0.42 of the body height above it. */
+    var profile = [
+      [0.00, 0.00], [0.45, 0.00], [0.68, 0.05], [0.88, 0.22],
+      [0.99, 0.55], [1.00, 0.95], [0.94, 1.35], [0.80, 1.65],
+      [0.62, 1.88], [0.50, 2.00], [0.46, 2.08]
+    ].map(function (pt) { return new THREE.Vector2(pt[0], pt[1]); });
+
+    bellMat = new THREE.MeshStandardMaterial({
+      color: 0x15181d,
+      metalness: 0.94,
+      roughness: 0.72,
+      envMap: env,
+      envMapIntensity: 0.80,
+      bumpMap: bump,
+      bumpScale: 0.012,
+      roughnessMap: bump,   // cast-iron speckle, so the highlight breaks up
+      emissive: 0xff7a1a,
+      emissiveIntensity: 0.0,
+      transparent: true
+    });
+
+    var body = new THREE.Mesh(new THREE.LatheGeometry(profile, 96), bellMat);
+    body.position.y = -1.49;              // centre the whole bell on the origin
+    group.add(body);
+
+    var handlePath = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-0.74, 1.72, 0), new THREE.Vector3(-0.80, 2.15, 0),
+      new THREE.Vector3(-0.58, 2.62, 0), new THREE.Vector3(0.00, 2.80, 0),
+      new THREE.Vector3(0.58, 2.62, 0),  new THREE.Vector3(0.80, 2.15, 0),
+      new THREE.Vector3(0.74, 1.72, 0)
+    ]);
+
+    handleMat = bellMat.clone();
+    handleMat.color = new THREE.Color(0x0d0f13);
+    handleMat.roughness = 0.88;
+
+    var handle = new THREE.Mesh(new THREE.TubeGeometry(handlePath, 120, 0.17, 24, false), handleMat);
+    handle.position.y = -1.49;
+    group.add(handle);
+
+    group.scale.setScalar(BASE_SCALE);
+    return group;
+  }
+
+  /* ------------------------------------------------------------
+     Data nodes: where the iron goes when it stops being iron.
+     ------------------------------------------------------------ */
+  function sprite() {
+    var c = document.createElement('canvas');
+    c.width = c.height = 64;
+    var ctx = c.getContext('2d');
+    var g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0.00, 'rgba(255,255,255,1)');
+    g.addColorStop(0.25, 'rgba(255,214,120,0.85)');
+    g.addColorStop(1.00, 'rgba(255,154,31,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  }
+
+  function buildParticles() {
+    var pos = new Float32Array(P_COUNT * 3);
+    var col = new Float32Array(P_COUNT * 3);
+    pDir = new Float32Array(P_COUNT * 3);
+    pSpeed = new Float32Array(P_COUNT);
+    pOrigin = new Float32Array(P_COUNT * 3);
+
+    var amber = new THREE.Color(0xff9a1f);
+    var gold = new THREE.Color(0xffd24a);
+    var violet = new THREE.Color(0x7b6bff);
+    var c = new THREE.Color();
+
+    for (var i = 0; i < P_COUNT; i++) {
+      // even-ish sphere of directions, biased upward and forward
+      var th = Math.random() * Math.PI * 2;
+      var z = Math.random() * 2 - 1;
+      var r = Math.sqrt(1 - z * z);
+      pDir[i * 3]     = r * Math.cos(th);
+      pDir[i * 3 + 1] = z * 0.9 + 0.22;
+      pDir[i * 3 + 2] = r * Math.sin(th) * 0.7;
+      pSpeed[i] = 0.6 + Math.pow(Math.random(), 1.7) * 3.0;
+
+      var t = Math.random();
+      c.copy(t < 0.5 ? amber : gold).lerp(violet, Math.max(0, t - 0.55) * 2.2);
+      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+    }
+
+    var geo = new THREE.BufferGeometry();
+    pAttr = new THREE.BufferAttribute(pos, 3);
+    geo.setAttribute('position', pAttr);
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+
+    pointsMat = new THREE.PointsMaterial({
+      size: 0.085,
+      map: sprite(),
+      vertexColors: true,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true
+    });
+    points = new THREE.Points(geo, pointsMat);
+    points.frustumCulled = false;
+
+    /* fluid geometric lines between nearby nodes */
+    lPairs = new Uint16Array(LINK_COUNT * 2);
+    var POOL = 260;
+    function disp(i, axis) { return pDir[i * 3 + axis] * pSpeed[i]; }
+    for (var k = 0; k < LINK_COUNT; k++) {
+      var a = Math.floor(Math.random() * POOL), best = -1, bestD = Infinity;
+      for (var probe = 0; probe < 40; probe++) {
+        var cand = Math.floor(Math.random() * POOL);
+        if (cand === a) continue;
+        var dx = disp(a, 0) - disp(cand, 0);
+        var dy = disp(a, 1) - disp(cand, 1);
+        var dz = disp(a, 2) - disp(cand, 2);
+        var d = dx * dx + dy * dy + dz * dz;
+        if (d < bestD) { bestD = d; best = cand; }
+      }
+      lPairs[k * 2] = a;
+      lPairs[k * 2 + 1] = best < 0 ? a : best;
+    }
+    var lgeo = new THREE.BufferGeometry();
+    lgeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(LINK_COUNT * 6), 3));
+    linksMat = new THREE.LineBasicMaterial({
+      color: 0xffc94a, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    links = new THREE.LineSegments(lgeo, linksMat);
+    links.frustumCulled = false;
+  }
+
+  /* ============================================================
+     Public API
+     ============================================================ */
+  function init(glCanvas, trailEl) {
+    THREE = global.THREE;
+    if (!THREE || !glCanvas) return false;
+
+    try {
+      renderer = new THREE.WebGLRenderer({
+        canvas: glCanvas, antialias: true, alpha: true, powerPreference: 'high-performance'
+      });
+    } catch (e) {
+      return false;                       // no WebGL — caller falls back to the static twin
+    }
+
+    dpr = Math.min(global.devicePixelRatio || 1, 2);
+    renderer.setPixelRatio(dpr);
+    if ('outputEncoding' in renderer) renderer.outputEncoding = THREE.sRGBEncoding;
+    if ('toneMapping' in renderer) {
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.0;
+    }
+
+    burstOrigin = new THREE.Vector3();
+    tmp = new THREE.Vector3();
+
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
+    camera.position.set(0, 0, 9);
+
+    var env = buildEnvMap();
+    scene.environment = env;
+
+    scene.add(new THREE.AmbientLight(0x3b4250, 0.30));
+
+    keyLight = new THREE.DirectionalLight(0xffffff, 2.1);
+    keyLight.position.set(3.5, 5, 4);
+    scene.add(keyLight);
+
+    amberLight = new THREE.PointLight(0xff8a1a, 0, 14, 2);
+    amberLight.position.set(-2.2, 0.6, 2.2);
+    scene.add(amberLight);
+
+    violetLight = new THREE.PointLight(0x7b6bff, 0, 22, 2);
+    violetLight.position.set(3, -2, 2.5);
+    scene.add(violetLight);
+
+    pivot = new THREE.Object3D();
+    pivot.position.y = ARM;          // rest position = world origin until main.js reframes
+    scene.add(pivot);
+
+    bell = buildKettlebell(env, buildBumpMap());
+    bell.position.y = -ARM;
+    pivot.add(bell);
+
+    buildParticles();
+    scene.add(points);
+    scene.add(links);
+
+    trailCanvas = trailEl;
+    trailCtx = trailEl ? trailEl.getContext('2d') : null;
+
+    ready = true;
+    resize();
+    return true;
+  }
+
+  function resize() {
+    if (!ready) return;
+    var w = global.innerWidth, h = global.innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    /* keep the bell a constant share of the *height* on wide screens,
+       and pull the camera back on narrow ones so it never clips */
+    camera.position.z = camera.aspect < 0.8 ? 12.5 : (camera.aspect < 1.25 ? 10.5 : 9);
+    camera.updateProjectionMatrix();
+
+    if (trailCanvas) {
+      trailCanvas.width = Math.floor(w * dpr);
+      trailCanvas.height = Math.floor(h * dpr);
+      trailCanvas.style.width = w + 'px';
+      trailCanvas.style.height = h + 'px';
+    }
+    trail.length = 0;
+  }
+
+  /* Screen-space glow trail. Drawn in 2D because a projected ribbon
+     reads far hotter than a 1px WebGL line, and costs almost nothing. */
+  function drawTrail(worldPos, energy, alive) {
+    if (!trailCtx) return;
+    var w = trailCanvas.width, h = trailCanvas.height;
+    trailCtx.clearRect(0, 0, w, h);
+    if (!alive) { trail.length = 0; return; }
+
+    tmp.copy(worldPos).project(camera);
+    var x = (tmp.x * 0.5 + 0.5) * w, y = (-tmp.y * 0.5 + 0.5) * h;
+
+    /* a teleport (scroll jump, tab switch) is not motion — start a new arc
+       rather than drawing a straight chord across the screen */
+    var last = trail[trail.length - 1];
+    if (last && Math.hypot(x - last.x, y - last.y) > w * 0.22) trail.length = 0;
+
+    if (!last || Math.hypot(x - last.x, y - last.y) > 1.2 * dpr) {
+      trail.push({ x: x, y: y });
+      if (trail.length > TRAIL_MAX) trail.shift();
+    }
+    if (trail.length < 4) return;
+
+    /* Drawn as overlapping smoothed chunks: each chunk is a quadratic spline
+       through the sample midpoints, so the arc reads as a swept ribbon
+       instead of a polyline, and each gets its own width and alpha for taper. */
+    var small = w / dpr < 700;
+    var CH = small ? 4 : 6, n = trail.length;
+    trailCtx.globalCompositeOperation = 'lighter';
+    trailCtx.lineCap = 'round';
+    trailCtx.lineJoin = 'round';
+
+    for (var pass = 0; pass < 2; pass++) {
+      var wide = pass === 0;
+      trailCtx.shadowBlur = (wide ? (small ? 24 : 40) : 12) * dpr;
+      trailCtx.shadowColor = wide ? 'rgba(255,138,26,.9)' : 'rgba(255,226,168,.95)';
+
+      for (var c = 0; c < CH; c++) {
+        var a = Math.floor(n * c / CH);
+        var b = Math.min(n - 1, Math.floor(n * (c + 1) / CH) + 1);
+        if (b - a < 2) continue;
+        var f = (c + 1) / CH;                          // 1 = newest chunk
+        var alpha = Math.pow(f, 2.2) * (wide ? 0.26 : 0.62) * energy;
+        if (alpha < 0.004) continue;
+
+        trailCtx.strokeStyle = wide
+          ? 'rgba(255,138,26,' + alpha + ')'
+          : 'rgba(255,232,186,' + alpha + ')';
+        trailCtx.lineWidth = (wide ? 30 : 7) * f * dpr * (0.45 + energy * 0.75);
+
+        trailCtx.beginPath();
+        trailCtx.moveTo(trail[a].x, trail[a].y);
+        for (var i = a + 1; i < b; i++) {
+          var mx = (trail[i].x + trail[i + 1].x) / 2;
+          var my = (trail[i].y + trail[i + 1].y) / 2;
+          trailCtx.quadraticCurveTo(trail[i].x, trail[i].y, mx, my);
+        }
+        trailCtx.stroke();
+      }
+    }
+    trailCtx.shadowBlur = 0;
+    trailCtx.globalCompositeOperation = 'source-over';
+  }
+
+  function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+
+  /* state = { p, angle, angVel, burstT, visible, energy } */
+  function update(state) {
+    if (!ready) return;
+
+    var burst = state.burstT;
+    var solid = 1 - easeOut(Math.min(1, burst / 0.45));   // the bell dissolving
+
+    if (state.anchor) pivot.position.set(state.anchor.x, state.anchor.y + ARM, 0);
+
+    pivot.rotation.z = state.angle;
+    bell.rotation.z = -state.angle * 0.30;                 // it hangs, it doesn't ride
+    bell.rotation.y = 0.42 + state.p * 0.75;               // the dimension shift, into a 3/4 view
+    bell.rotation.x = -0.06 + state.angVel * 0.035;
+    var baseScale = state.scale || BASE_SCALE;
+    bell.scale.setScalar(baseScale * (0.94 + 0.06 * Math.min(1, state.p / 0.18)) * (0.35 + 0.65 * solid));
+
+    bell.visible = state.visible && solid > 0.01;
+    var appear = state.appear === undefined ? 1 : state.appear;
+    bellMat.opacity = handleMat.opacity = solid * appear;
+    var warmth = Math.min(1, Math.max(0, (state.p - 0.18) / 0.22));   // amber belongs to the transition, not the legacy state
+    var eMat = Math.min(state.energy, 0.62);   // the metal shouldn't blow out on a fast scroll
+    bellMat.emissiveIntensity = handleMat.emissiveIntensity = eMat * 0.10 * warmth + burst * 0.75;
+
+    amberLight.intensity = eMat * 3.0 * warmth;
+    violetLight.intensity = burst * 5.5;
+    camera.position.z += ((camera.aspect < 0.8 ? 12.5 : (camera.aspect < 1.25 ? 10.5 : 9)) - 0.9 * state.p - camera.position.z) * 0.1;
+
+    bell.updateMatrixWorld();
+    bell.getWorldPosition(burstOrigin);
+    var bellWorld = burstOrigin;
+
+    if (burst <= 0.001) {
+      // freeze the origin at the top of the arc; re-arms if you scroll back
+      for (var i = 0; i < P_COUNT; i++) {
+        pOrigin[i * 3] = bellWorld.x;
+        pOrigin[i * 3 + 1] = bellWorld.y;
+        pOrigin[i * 3 + 2] = bellWorld.z;
+      }
+      pointsMat.opacity = 0;
+      linksMat.opacity = 0;
+    } else {
+      var t = easeOut(burst) * 1.15;
+      var arr = pAttr.array;
+      for (var j = 0; j < P_COUNT; j++) {
+        var k = j * 3;
+        var sp = pSpeed[j] * t;
+        arr[k]     = pOrigin[k]     + pDir[k]     * sp;
+        arr[k + 1] = pOrigin[k + 1] + pDir[k + 1] * sp - t * t * 0.55 + Math.sin(t * 3 + j) * 0.05;
+        arr[k + 2] = pOrigin[k + 2] + pDir[k + 2] * sp;
+      }
+      pAttr.needsUpdate = true;
+      pointsMat.opacity = Math.min(1, burst * 4) * (1 - Math.pow(Math.max(0, burst - 0.55) / 0.45, 1.6));
+      pointsMat.size = 0.085 + burst * 0.05;
+
+      var la = links.geometry.attributes.position.array;
+      for (var m = 0; m < LINK_COUNT; m++) {
+        var a3 = lPairs[m * 2] * 3, b3 = lPairs[m * 2 + 1] * 3;
+        la[m * 6]     = arr[a3];     la[m * 6 + 1] = arr[a3 + 1]; la[m * 6 + 2] = arr[a3 + 2];
+        la[m * 6 + 3] = arr[b3];     la[m * 6 + 4] = arr[b3 + 1]; la[m * 6 + 5] = arr[b3 + 2];
+      }
+      links.geometry.attributes.position.needsUpdate = true;
+      linksMat.opacity = Math.max(0, Math.sin(Math.min(1, burst / 0.8) * Math.PI)) * 0.34;
+    }
+
+    drawTrail(bellWorld, state.energy, state.visible && burst < 0.6);
+    renderer.render(scene, camera);
+  }
+
+  function clearTrail() {
+    if (trailCtx) trailCtx.clearRect(0, 0, trailCanvas.width, trailCanvas.height);
+    trail.length = 0;
+  }
+
+  /* half-extents of the z=0 plane in world units — lets main.js convert
+     a DOM rectangle into a world-space anchor for the morph */
+  function viewSize() {
+    if (!ready) return { halfW: 4.4, halfH: 2.75 };
+    var halfH = Math.tan(camera.fov * Math.PI / 360) * camera.position.z;
+    return { halfW: halfH * camera.aspect, halfH: halfH };
+  }
+
+  global.SwingScene = {
+    init: init, update: update, resize: resize, clearTrail: clearTrail,
+    viewSize: viewSize, ARM: ARM,
+    isReady: function () { return ready; }
+  };
+})(window);
