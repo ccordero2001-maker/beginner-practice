@@ -116,7 +116,9 @@
       s.src = 'js/vendor/three.min.js';
       s.onload = function () {
         var s2 = document.createElement('script');
-        s2.src = 'js/swing-scene.js';
+        /* override hook for experimental scene variants (e.g. test pages);
+           unset on every shipped page, so behaviour there is unchanged */
+        s2.src = window.BOLD_SWING_SCRIPT || 'js/swing-scene.js';
         s2.onload = function () { resolve(!!window.SwingScene); };
         s2.onerror = function () { resolve(false); };
         document.head.appendChild(s2);
@@ -158,6 +160,7 @@
   var wipe = document.getElementById('stageWipe');
   var streams = document.getElementById('streams');
   var streamPath = [].slice.call(document.querySelectorAll('.streams__path'));
+  var streamLabel = [].slice.call(document.querySelectorAll('.stream-label'));
   var cta = document.getElementById('exploreCta');
 
   var running = false, rafId = 0, booted = false;
@@ -268,9 +271,13 @@
     }
     if (streams) {
       var s = range(p, 0.74, 0.94);
-      streams.style.opacity = String(s * (1 - range(p, 0.97, 1)));
+      var fadeOut = 1 - range(p, 0.97, 1);
+      streams.style.opacity = String(s * fadeOut);
       for (var k = 0; k < streamPath.length; k++) {
-        streamPath[k].style.strokeDashoffset = String(1 - easeOut(clamp01(s * 1.25 - k * 0.08)));
+        var drawn = easeOut(clamp01(s * 1.25 - k * 0.08));
+        streamPath[k].style.strokeDashoffset = String(1 - drawn);
+        /* name it only once its line has actually arrived */
+        if (streamLabel[k]) streamLabel[k].style.opacity = String(range(drawn, 0.7, 1) * fadeOut);
       }
     }
 

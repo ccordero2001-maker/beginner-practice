@@ -305,3 +305,69 @@ assets — consistent with how `buildBumpMap()` already worked.
 Verified across the full swing sequence in Chrome at rest, mid-arc, and through the
 burst/hand-off, in both the default and hard-flick scroll cases: no console errors, no
 geometry artifacts, no visible seam or gap at either handle root.
+
+## 2.5 The handle roots, revisited
+
+2.4's collar fix removed the gap, but close inspection at rest showed the two roots
+weren't actually symmetric: the collar spheres (radius 0.30) extended well past the
+tube's own footprint (~0.20 flared), reading as two bolted-on knobs rather than a forged
+shoulder. Sized down to `collarGeo` radius 0.20 — just enough to cover the tube's actual
+seam ring — and eased the tube's own flare back to a moderate `0.85 + 0.45·edge` (was
+`0.82 + 0.75·edge`), since the collar carries the join now rather than the tube trying to
+do it alone. Confirmed both roots read identically at rest and mid-swing.
+
+Also re-verified the spring physics from 2.1 with a targeted test: a hard flick-scroll,
+screenshotted at 0/200/400/700/1200ms after release. No overshoot glitch, no stutter —
+what had read as roughness was almost certainly the handle-root seam itself catching
+light unevenly while rotating through the arc, not the underlying motion.
+
+## 2.6 The three burst-streams didn't connect to anything
+
+The three lines fanning out from the burst (`#streams`) faded in, drew themselves, and
+faded out pointing at nothing — no label, no landing target, gone before the page even
+scrolled far enough to reveal the pillars section they're supposed to represent. The
+copy directly beneath them already names what they are ("splits into three streams:
+personal coaching, corporate wellness, and the app that holds both"), so the fix was to
+actually say so on screen: `.stream-label` spans, one per line, reading "For
+individuals" / "The product" / "For organisations" — the exact three phrases the
+pillars section (`#pillars`) uses for the same three things. Each label fades in only
+once its own line has finished drawing (`main.js`, reusing the existing per-path stagger
+in `paint()`), so the sequence still reads as a genuine arrival, not text that was
+already there. Positioned at `top:76%` to clear the hero-mini rail in the bottom-left
+corner, which the first placement (87%) collided with.
+
+## 2.7 Prototype: two bells, mirrored, colliding — a wink at the two founders
+
+Requested as an experiment, not a commitment: **not wired into any shipped page.**
+Lives entirely in `js/swing-scene-twin.js` (a variant of `swing-scene.js`) and
+`test-twin-bell.html` (a copy of `index.html` with a visible red "TEST PAGE" banner and
+one inline override before `main.js` loads: `window.BOLD_SWING_SCRIPT =
+'js/swing-scene-twin.js'`). `main.js` gained a two-line hook — `s2.src =
+window.BOLD_SWING_SCRIPT || 'js/swing-scene.js'` — so it can drive either scene with zero
+other changes; the override is unset on every real page, so `index.html`, `heritage.html`
+and `tradition.html` are behaviourally identical to before. Re-verified after adding the
+hook.
+
+The idea: the single outlined mark still splits into two bells instead of one. Each
+mirrors the other — opposite x-anchor, opposite rotation, opposite yaw — so they swing
+outward from centre in genuinely mirrored arcs rather than two identical clones. Through
+the second half of the arc (`CONVERGE_FROM=0.34` to `CONVERGE_TO=0.58`, chosen to finish
+just before `BURST_FROM` in `main.js`) both anchors ease back toward the shared centre
+point, so the two bells visibly swing toward each other and collide. The burst
+originates from their collision point (the midpoint of both bells' world positions) and
+throws double the data nodes of the single-bell version — 3,400 instead of 1,700 — since
+now there are genuinely two bells' worth of iron turning to data at once.
+
+Each bell still gets its own independently generated `buildWeatherMap()` — same rust/
+paint texture, different random wear pattern per bell — so they read as two distinct
+objects, not a duplicated asset.
+
+Verified scrolling through the full sequence in Chrome: symmetric morph-in from the
+single mark, mirrored outward swing, visible convergence, collision, burst into a
+noticeably denser field than the single-bell version, clean hand-off into "Which one are
+you?" — no console errors. `index.html` re-checked afterward and confirmed unaffected.
+
+**Open decision:** whether this replaces the single-bell sequence, ships as an
+alternate/Easter-egg path, or stays a one-off. It changes the story the animation tells
+(one becomes two, then one again) rather than refining the existing one, so that's a
+call for whoever owns the narrative, not something to default into production.

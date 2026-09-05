@@ -197,6 +197,19 @@ button,input,select,textarea{font:inherit;color:inherit}
 .streams{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:none}
 .streams__path{stroke-dasharray:1;stroke-dashoffset:1;filter:drop-shadow(0 0 10px rgba(var(--swing-trail),.7))}
 
+/* Where each stream actually goes — named the moment its line arrives,
+   in the exact words the pillars section below uses for the same three
+   things, so the burst reads as a fork into real destinations. */
+.stream-label{
+  position:absolute;top:76%;transform:translate(-50%,-50%);
+  font-family:var(--font-display);font-weight:700;font-size:var(--fs-small);
+  letter-spacing:.02em;color:var(--stage-fg);opacity:0;white-space:nowrap;
+  text-shadow:0 2px 20px rgba(0,0,0,.9);pointer-events:none;
+}
+.stream-label[data-stream="0"]{left:15%}
+.stream-label[data-stream="1"]{left:50.5%}
+.stream-label[data-stream="2"]{left:85.5%}
+
 /* ============================================================
    REDUCED-MOTION TWIN
    ============================================================ */
