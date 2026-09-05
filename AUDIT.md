@@ -200,3 +200,108 @@ Three further source colours needed adjusting rather than replacing: teal `#0080
 `#007070` and forest green `#228B22` → `#1B6F1B` to clear 4.5:1 on their own grounds, and
 copper `#B87333` → `#D4924F` on Heritage's dark slate cards. In every case the source
 colour is retained for large fills; only the text variant moved.
+
+---
+
+# Round 2 — swing physics and the 3D bell
+
+Prompted by hands-on review of the shipped swing: the arc read better than the pre-audit
+build but still felt numerically off, the burst read as sparse, the caption text visibly
+swung with the bell, and the bell itself was a stylised blob rather than the vintage
+competition kettlebell in `Kettlebell Images/`. Fixed in `js/main.js` and
+`js/swing-scene.js`; nothing here touches markup, palettes, or contrast.
+
+## 2.1 The spring stepping could ring on a dropped frame or a fast flick
+
+`js/main.js`'s swing was semi-implicit Euler integration: `angVel += (target-angle)*k*dt
+- angVel*c*dt`. `dt` is capped at 0.05s for a stalled frame, and `k` climbs to 48 as the
+swing progresses — at that combination Euler stepping is at the edge of numerical
+stability, so a stutter or a hard flick could make the bell overshoot and wobble instead
+of settling.
+
+Replaced with `springStep()`: the exact closed-form solution for a damped harmonic
+oscillator (`x'' + c·x' + k·x = 0`), the same class of solution used by CASpringAnimation
+and by spring libraries like `wobble`. It is stable for any `dt`, so the settle behaves
+identically regardless of frame rate. Same spring constants throughout — this changed the
+integration method, not the tuning.
+
+Separately, the raw scroll delta that gets injected as a velocity kick each frame is now
+passed through a light exponential smoothing pass (`smoothDScroll`) before use. Native
+wheel/trackpad deltas arrive in noisy, uneven bursts; feeding that straight into angular
+velocity was reading as jitter rather than momentum.
+
+Verified with a hard flick-scroll test, screenshotted at 0/200/400/700/1200ms after
+release: the bell decelerates and settles with no pop, no overshoot glitch, no stutter.
+
+## 2.2 The caption text inherited the bell's lean
+
+`#stageTilt`'s rotateZ/rotateX/translate3d transform — meant to give the canvas and its
+glow trail a sense of camera-attached parallax — was being applied to the whole stage,
+including `#heroCopy` and the three `.hook` captions. During the swing's steepest angles
+this read as the words themselves swinging, which fights legibility for the one thing on
+screen guaranteed to always have text on it.
+
+Moved `#heroCopy` and `.stage__layer--hooks` out of `#stageTilt` to be siblings of it
+inside `.stage__sticky` (`src/page.html`) — same absolute-positioned layout, so nothing
+shifts on screen, but the text no longer inherits the tilt. Canvas, trail, the outlined
+2D mark, the wipe, and the burst-line SVG stay inside `#stageTilt` and keep swinging;
+only the words are stalled. Confirmed frame-by-frame: the bell swings to its full angle
+right beside dead-level, horizontally stable captions.
+
+## 2.3 The data-node burst read as sparse
+
+1,100 particles fading in and out together, no per-node variation. Bumped to 1,700 and
+gave each one its own twinkle: a random phase/speed pair (`pTwinklePhase`,
+`pTwinkleSpeed`) modulates its brightness independently every frame, so the burst reads
+as scattered glinting nodes rather than a flat cloud brightening and dimming in lockstep.
+`refreshPalette()` (the live re-tint on palette/theme switch) was updated to write into
+the new base-colour buffer (`pBaseCol`) rather than the display buffer directly — otherwise
+the next frame's twinkle math would have overwritten a palette switch within one frame.
+
+## 2.4 The kettlebell didn't match the reference photography
+
+Three vintage competition kettlebells were supplied as reference
+(`Kettlebell Images/`): a rounder, shorter-necked body than the shipped bell, a thick
+handle that visibly forges into the body at both roots rather than a thin ring resting on
+top, and heavy surface wear — green/teal paint chipped through to rust and bare iron,
+with a stamped weight number.
+
+**Body profile.** The original `LatheGeometry` profile tapered continuously from its
+widest point all the way to the neck — an egg silhouette, not the round-bodied, short-neck
+shape in the photos. Rewritten with a distinct peak radius and continuous curvature
+(no flat-radius run anywhere in the curve), giving a genuinely rounded belly instead of
+a barrel-with-tapered-ends.
+
+**The open-top defect.** `LatheGeometry` only auto-caps a revolved surface where the
+profile's endpoint radius is exactly 0 — same mechanism that closes the flat base (two
+points at the same height, radii 0 and R). The *original* profile's final point was
+`[0.46, 2.08]`, non-zero, so the neck's top was never actually closed; it was small and
+tucked behind the old thin handle, so it went unnoticed. Reshaping the body for a rounder
+profile exposed that same latent hole as a visible black gap straight through the
+geometry at the neck. Fixed the same way the base is capped: added a matching closing
+point `[0.00, 2.08]` at the same height.
+
+**The handle.** Added `taperTube()`, a post-process that displaces each ring of a
+`TubeGeometry`'s vertices radially from the path's own centerline by a per-position
+scale factor — so the handle is thick at both roots and slims to a comfortable grip at
+the top, instead of a constant-radius rod. On its own this exposed a second problem: a
+tube sweeps its circular cross-section along the path's Frenet frame, which doesn't align
+with the lathe body's surface normal at the root, so no amount of flare produced a clean
+blend — one side would show a visible hard ridge where the two surfaces met. Fixed by
+adding a small filler sphere at each root (`collarGeo`, sized to just cover the tube's
+actual seam ring, not larger), which buries the seam the way a real casting's shoulder is
+one continuous piece of iron rather than two shapes touching. The handle roots were also
+narrowed (were positioned outside the new, slimmer neck radius; narrowed to sit inside it)
+so the tube overlaps solid body instead of floating past its edge.
+
+**Surface.** Replaced the flat single-color material with `buildWeatherMap()`: a
+canvas-painted texture layering rust-orange blotches and muted teal/green paint patches
+over a near-black iron base, fine per-pixel grain, and a stamped weight-number medallion —
+painted directly onto the lathe's own UVs (u = around, v = bottom-to-top), so it wraps
+once around the body rather than tiling. The existing noise-based bump/roughness map is
+unchanged and layers underneath it. Still 100% canvas-generated, zero binary image
+assets — consistent with how `buildBumpMap()` already worked.
+
+Verified across the full swing sequence in Chrome at rest, mid-arc, and through the
+burst/hand-off, in both the default and hard-flick scroll cases: no console errors, no
+geometry artifacts, no visible seam or gap at either handle root.

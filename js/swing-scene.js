@@ -17,14 +17,14 @@
   /* ---------- tunables ---------- */
   var ARM       = 3.2;   // pendulum arm, world units
   var BASE_SCALE= 0.36;  // fallback; main.js locks this to the 2D mark's on-screen size
-  var P_COUNT   = 1100;  // data nodes
+  var P_COUNT   = 1700;  // data nodes
   var LINK_COUNT= 150;   // constellation segments
   var TRAIL_MAX = 130;   // projected trail samples
 
   var scene, camera, renderer, pivot, bell, bellMat, handleMat;
   var keyLight, amberLight, violetLight;
   var points, pointsMat, links, linksMat;
-  var pAttr, pOrigin, pDir, pSpeed, lPairs;
+  var pAttr, cAttr, pOrigin, pDir, pSpeed, pBaseCol, pTwinklePhase, pTwinkleSpeed, lPairs;
   var trailCtx, trailCanvas, trail = [];
   var burstOrigin = null, tmp = null;   // built in init(); THREE may not exist yet
 
@@ -115,6 +115,111 @@
     return t;
   }
 
+  function clampByte(v) { return v < 0 ? 0 : (v > 255 ? 255 : v); }
+
+  /* The vintage competition look: chipped green/teal paint over bare rust
+     and black iron, plus a stamped weight number. Painted once onto the
+     lathe's own UVs (u = around, v = bottom-to-top), so it wraps the body
+     like a real worn label rather than tiling like the bump map does. */
+  function buildWeatherMap() {
+    var w = 1024, h = 512;
+    var c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    var ctx = c.getContext('2d');
+
+    var base = ctx.createLinearGradient(0, 0, 0, h);
+    base.addColorStop(0, '#3a2d24');
+    base.addColorStop(0.5, '#241a15');
+    base.addColorStop(1, '#170f0c');
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, w, h);
+
+    function blotch(x, y, r, stops, alpha) {
+      var g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      for (var i = 0; i < stops.length; i++) g.addColorStop(stops[i][0], stops[i][1]);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(x, y, r, r * (0.55 + Math.random() * 0.5), Math.random() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // rust blooms — warm rust-orange, bleeding through wherever paint is gone
+    for (var i = 0; i < 50; i++) {
+      blotch(Math.random() * w, Math.random() * h, 26 + Math.random() * 95, [
+        [0, 'rgba(150,86,42,0.9)'], [0.6, 'rgba(94,52,28,0.55)'], [1, 'rgba(94,52,28,0)']
+      ], 0.3 + Math.random() * 0.35);
+    }
+
+    // surviving paint — muted heritage teal/green, the largest surface patches
+    for (var j = 0; j < 22; j++) {
+      blotch(Math.random() * w, Math.random() * h, 55 + Math.random() * 150, [
+        [0, 'rgba(60,86,74,0.95)'], [0.7, 'rgba(42,62,54,0.6)'], [1, 'rgba(42,62,54,0)']
+      ], 0.38 + Math.random() * 0.32);
+    }
+
+    // fine grain, so it reads as cast metal up close rather than a flat print
+    var img = ctx.getImageData(0, 0, w, h);
+    for (var k = 0; k < img.data.length; k += 4) {
+      var n = (Math.random() - 0.5) * 24;
+      img.data[k] = clampByte(img.data[k] + n);
+      img.data[k + 1] = clampByte(img.data[k + 1] + n);
+      img.data[k + 2] = clampByte(img.data[k + 2] + n);
+    }
+    ctx.putImageData(img, 0, 0);
+
+    // the stamped weight number, sitting on the belly like the reference bells
+    ctx.save();
+    ctx.translate(w * 0.5, h * 0.46);
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.arc(0, 0, 58, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(185,175,155,0.22)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(-2, -2, 58, 0, Math.PI * 2); ctx.stroke();
+    ctx.font = '700 46px Georgia, serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillText('24', 1, 3);
+    ctx.fillStyle = 'rgba(195,185,165,0.28)';
+    ctx.fillText('24', -1, 0);
+    ctx.restore();
+
+    var t = new THREE.CanvasTexture(c);
+    if ('sRGBEncoding' in THREE) t.encoding = THREE.sRGBEncoding;
+    return t;
+  }
+
+  /* Flares the tube's radius as a function of t (0..1 along its path),
+     so the handle reads as forged with the body at both roots and only
+     narrows to a comfortable grip at the top — instead of a uniform-radius
+     rod. Displaces each ring of vertices around the path's own centerline,
+     so it works on any TubeGeometry regardless of how it curves. */
+  function taperTube(geometry, path, tubularSegments, radialSegments, taperFn) {
+    var arr = geometry.attributes.position.array;
+    var stride = (radialSegments + 1) * 3;
+    var center = new THREE.Vector3();
+    for (var i = 0; i <= tubularSegments; i++) {
+      var s = taperFn(i / tubularSegments);
+      path.getPointAt(i / tubularSegments, center);
+      var rowStart = i * stride;
+      for (var j = 0; j <= radialSegments; j++) {
+        var idx = rowStart + j * 3;
+        arr[idx]     = center.x + (arr[idx]     - center.x) * s;
+        arr[idx + 1] = center.y + (arr[idx + 1] - center.y) * s;
+        arr[idx + 2] = center.z + (arr[idx + 2] - center.z) * s;
+      }
+    }
+    geometry.attributes.position.needsUpdate = true;
+    geometry.computeVertexNormals();
+  }
+
+  function handleTaper(t) {
+    var edge = Math.pow(Math.abs(t - 0.5) * 2, 2.4);   // 0 at the grip, 1 at both roots
+    return 0.85 + 0.45 * edge;   // moderate flare — the collar spheres carry the rest of the join
+  }
+
   /* ------------------------------------------------------------
      The bell itself: a lathed cast body plus a swept-tube handle.
      ------------------------------------------------------------ */
@@ -122,19 +227,27 @@
     var group = new THREE.Group();
 
     /* Proportions follow the 2D heritage mark: body as tall as it is wide,
-       handle rising ~0.42 of the body height above it. */
+       handle rising ~0.42 of the body height above it. Radius changes at
+       every point — no flat-radius run — so the revolve reads as a curved
+       belly rather than a barrel with rounded ends. The final two points
+       share a height (2.08) and close to radius 0, capping the neck the
+       same way the first two points cap the flat base: without that, a
+       LatheGeometry with a non-zero final radius leaves its far end open,
+       and you're looking straight through the neck into empty scene. */
     var profile = [
-      [0.00, 0.00], [0.45, 0.00], [0.68, 0.05], [0.88, 0.22],
-      [0.99, 0.55], [1.00, 0.95], [0.94, 1.35], [0.80, 1.65],
-      [0.62, 1.88], [0.50, 2.00], [0.46, 2.08]
+      [0.00, 0.00], [0.52, 0.00], [0.86, 0.06], [0.99, 0.24],
+      [1.00, 0.52], [0.99, 0.80], [0.93, 1.08], [0.82, 1.34],
+      [0.68, 1.56], [0.54, 1.76], [0.45, 1.94], [0.40, 2.08],
+      [0.00, 2.08]
     ].map(function (pt) { return new THREE.Vector2(pt[0], pt[1]); });
 
     bellMat = new THREE.MeshStandardMaterial({
-      color: 0x15181d,
-      metalness: 0.94,
-      roughness: 0.72,
+      color: 0xffffff,
+      map: buildWeatherMap(),   // chipped paint over rust — the actual albedo now
+      metalness: 0.88,
+      roughness: 0.78,
       envMap: env,
-      envMapIntensity: 0.80,
+      envMapIntensity: 0.75,
       bumpMap: bump,
       bumpScale: 0.012,
       roughnessMap: bump,   // cast-iron speckle, so the highlight breaks up
@@ -147,20 +260,39 @@
     body.position.y = -1.49;              // centre the whole bell on the origin
     group.add(body);
 
+    /* Root x narrowed to sit inside the new, slimmer neck radius (~0.57 at
+       y=1.72) so the flared tube base overlaps solid body instead of
+       floating outside it with a gap between them. */
     var handlePath = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-0.74, 1.72, 0), new THREE.Vector3(-0.80, 2.15, 0),
-      new THREE.Vector3(-0.58, 2.62, 0), new THREE.Vector3(0.00, 2.80, 0),
-      new THREE.Vector3(0.58, 2.62, 0),  new THREE.Vector3(0.80, 2.15, 0),
-      new THREE.Vector3(0.74, 1.72, 0)
+      new THREE.Vector3(-0.58, 1.72, 0), new THREE.Vector3(-0.63, 2.15, 0),
+      new THREE.Vector3(-0.46, 2.62, 0), new THREE.Vector3(0.00, 2.80, 0),
+      new THREE.Vector3(0.46, 2.62, 0),  new THREE.Vector3(0.63, 2.15, 0),
+      new THREE.Vector3(0.58, 1.72, 0)
     ]);
 
     handleMat = bellMat.clone();
-    handleMat.color = new THREE.Color(0x0d0f13);
+    handleMat.color = new THREE.Color(0xcfcfcf);   // bare-handled from grip wear, not repainted
     handleMat.roughness = 0.88;
 
-    var handle = new THREE.Mesh(new THREE.TubeGeometry(handlePath, 120, 0.17, 24, false), handleMat);
+    var handleGeo = new THREE.TubeGeometry(handlePath, 120, 0.15, 24, false);
+    taperTube(handleGeo, handlePath, 120, 24, handleTaper);   // thick at both roots, slims at the grip
+    var handle = new THREE.Mesh(handleGeo, handleMat);
     handle.position.y = -1.49;
     group.add(handle);
+
+    /* A tube is a circle swept along the path's own Frenet frame, which
+       doesn't line up with the lathe's surface normal at the root — no
+       matter how much the tube flares, that mismatch shows up as a hard
+       ridge where the two surfaces meet instead of a smooth fillet. Two
+       collar spheres, one at each root, bury the seam under solid material
+       the way a real casting's shoulder is one continuous piece of iron. */
+    var collarGeo = new THREE.SphereGeometry(0.20, 20, 16);
+    [handlePath.points[0], handlePath.points[handlePath.points.length - 1]].forEach(function (p) {
+      var collar = new THREE.Mesh(collarGeo, handleMat);
+      collar.position.set(p.x, p.y - 1.49, p.z);
+      collar.scale.set(1.05, 1.15, 0.85);
+      group.add(collar);
+    });
 
     group.scale.setScalar(BASE_SCALE);
     return group;
@@ -184,10 +316,13 @@
 
   function buildParticles() {
     var pos = new Float32Array(P_COUNT * 3);
-    var col = new Float32Array(P_COUNT * 3);
+    pBaseCol = new Float32Array(P_COUNT * 3);
+    var dispCol = new Float32Array(P_COUNT * 3);
     pDir = new Float32Array(P_COUNT * 3);
     pSpeed = new Float32Array(P_COUNT);
     pOrigin = new Float32Array(P_COUNT * 3);
+    pTwinklePhase = new Float32Array(P_COUNT);
+    pTwinkleSpeed = new Float32Array(P_COUNT);
 
     var cA = new THREE.Color(rgbHexNum(pal.trail));
     var cB = new THREE.Color(pal.node);
@@ -204,18 +339,25 @@
       pDir[i * 3 + 2] = r * Math.sin(th) * 0.7;
       pSpeed[i] = 0.6 + Math.pow(Math.random(), 1.7) * 3.0;
 
+      /* each node glints on its own clock, so the burst reads as scattered
+         sparkle instead of a flat cloud fading in lockstep */
+      pTwinklePhase[i] = Math.random() * Math.PI * 2;
+      pTwinkleSpeed[i] = 3 + Math.random() * 7;
+
       var t = Math.random();
       c.copy(t < 0.5 ? cA : cB).lerp(cC, Math.max(0, t - 0.55) * 2.2);
-      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+      pBaseCol[i * 3] = c.r; pBaseCol[i * 3 + 1] = c.g; pBaseCol[i * 3 + 2] = c.b;
+      dispCol[i * 3] = c.r; dispCol[i * 3 + 1] = c.g; dispCol[i * 3 + 2] = c.b;
     }
 
     var geo = new THREE.BufferGeometry();
     pAttr = new THREE.BufferAttribute(pos, 3);
     geo.setAttribute('position', pAttr);
-    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    cAttr = new THREE.BufferAttribute(dispCol, 3);
+    geo.setAttribute('color', cAttr);
 
     pointsMat = new THREE.PointsMaterial({
-      size: 0.085,
+      size: 0.075,
       map: sprite(),
       vertexColors: true,
       transparent: true,
@@ -448,16 +590,22 @@
     } else {
       var t = easeOut(burst) * 1.15;
       var arr = pAttr.array;
+      var cArr = cAttr.array;
+      var time = performance.now() * 0.001;
       for (var j = 0; j < P_COUNT; j++) {
         var k = j * 3;
         var sp = pSpeed[j] * t;
         arr[k]     = pOrigin[k]     + pDir[k]     * sp;
         arr[k + 1] = pOrigin[k + 1] + pDir[k + 1] * sp - t * t * 0.55 + Math.sin(t * 3 + j) * 0.05;
         arr[k + 2] = pOrigin[k + 2] + pDir[k + 2] * sp;
+
+        var tw = 0.45 + 0.55 * Math.max(0, Math.sin(time * pTwinkleSpeed[j] + pTwinklePhase[j]));
+        cArr[k] = pBaseCol[k] * tw; cArr[k + 1] = pBaseCol[k + 1] * tw; cArr[k + 2] = pBaseCol[k + 2] * tw;
       }
       pAttr.needsUpdate = true;
+      cAttr.needsUpdate = true;
       pointsMat.opacity = Math.min(1, burst * 4) * (1 - Math.pow(Math.max(0, burst - 0.55) / 0.45, 1.6));
-      pointsMat.size = 0.085 + burst * 0.05;
+      pointsMat.size = 0.07 + burst * 0.065;
 
       var la = links.geometry.attributes.position.array;
       for (var m = 0; m < LINK_COUNT; m++) {
@@ -494,13 +642,15 @@
     var cB = new THREE.Color(pal.node);
     var cC = new THREE.Color(pal.node2);
     var c = new THREE.Color();
-    var col = points.geometry.attributes.color.array;
+    var disp = cAttr.array;
     for (var i = 0; i < P_COUNT; i++) {
       var t = (i * 0.6180339887) % 1;                  // stable, not re-randomised
       c.copy(t < 0.5 ? cA : cB).lerp(cC, Math.max(0, t - 0.55) * 2.2);
-      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+      var k = i * 3;
+      pBaseCol[k] = c.r; pBaseCol[k + 1] = c.g; pBaseCol[k + 2] = c.b;
+      disp[k] = c.r; disp[k + 1] = c.g; disp[k + 2] = c.b;
     }
-    points.geometry.attributes.color.needsUpdate = true;
+    cAttr.needsUpdate = true;
     pointsMat.map = sprite(); pointsMat.needsUpdate = true;
     linksMat.color.set(pal.node);
     bellMat.emissive.setHex(rgbHexNum(pal.trail));
