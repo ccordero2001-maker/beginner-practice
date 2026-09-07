@@ -566,48 +566,176 @@
   function easeInOut(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
   function clamp01(v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
 
+  /* Same closed-form damped-oscillator solver as main.js's springStep —
+     copied rather than shared, since this module has no access to
+     main.js's closure. Used to give bell B its own physics. */
+  function springStep(x0, v0, k, c, dt) {
+    var alpha = c / 2;
+    var wd2 = k - alpha * alpha;
+    var decay = Math.exp(-alpha * dt);
+    if (wd2 <= 1e-6) {
+      var b = v0 + alpha * x0;
+      return { x: decay * (x0 + b * dt), v: decay * (b - alpha * (x0 + b * dt)) };
+    }
+    var wd = Math.sqrt(wd2);
+    var Ax = x0, Bx = (v0 + alpha * x0) / wd;
+    var cosW = Math.cos(wd * dt), sinW = Math.sin(wd * dt);
+    return {
+      x: decay * (Ax * cosW + Bx * sinW),
+      v: decay * ((-alpha * Ax + Bx * wd) * cosW + (-alpha * Bx - Ax * wd) * sinW)
+    };
+  }
+
+  /* Bell A uses main.js's own state.angle/state.angVel directly — it's
+     the reference swing, identical to the single-bell page. Bell B runs
+     an independent copy of the same spring model with its own timing and
+     reach, so at any paused frame the two poses don't line up as an exact
+     reflection: it reads as two bodies that happen to meet, not one
+     motion and its mirror. */
+  var SWING_FROM_B = 0.16, SWING_PEAK_B = 0.64;
+  var BACK_ANGLE_B = 0.52, PEAK_ANGLE_B = -1.02;
+  var angleB = 0, angVelB = 0, lastTB = 0;
+
+  function targetAngleB(p) {
+    if (p < SWING_FROM_B) return 0;
+    var u = clamp01((p - SWING_FROM_B) / (SWING_PEAK_B - SWING_FROM_B));
+    if (u < 0.3) return BACK_ANGLE_B * easeInOut(u / 0.3);
+    return BACK_ANGLE_B + (PEAK_ANGLE_B - BACK_ANGLE_B) * easeInOut((u - 0.3) / 0.7);
+  }
+
+  function stepBellB(p) {
+    var now = performance.now();
+    var dt = lastTB ? Math.min((now - lastTB) / 1000, 0.05) : 0.016;
+    lastTB = now;
+    var target = targetAngleB(p);
+    var k = 22 + p * 18, c = 5.8;   // a touch softer/heavier than bell A's implied k=26+p*22, c=5.4
+    var step = springStep(angleB - target, angVelB, k, c, dt);
+    angleB = target + step.x;
+    angVelB = step.v;
+  }
+
   /* Converge fraction: 0 through the outward swing (each rig sits at its
      own mirrored anchor), 1 by CONVERGE_TO (both rigs collapsed onto the
      shared centre point). Hand-tuned to finish just before BURST_FROM
-     (0.58 in main.js) so the collision and the burst land together. */
+     (0.58 in main.js) so the collision and the burst land together. This
+     part stays shared/synchronised between the two rigs regardless of
+     the angle divergence above — both still have to physically arrive at
+     the same point at the same time for the collision to read. */
   var CONVERGE_FROM = 0.34, CONVERGE_TO = 0.58;
+
+  /* Bell B's departure from the shared birth point (main.js's MORPH_IN is
+     0.09; anchorFor itself starts easing at 0.10). Starting a beat later
+     and reaching full spread with a different easing shape (ease-out, not
+     A's ease-in-out) than an exact negation of state.anchor.x every frame
+     — which read as a reflection appearing in lockstep, not a second body
+     leaving the same point on its own. Both still land at the same
+     mirrored magnitude by CONVERGE_FROM, so the swing/collision timing
+     downstream is unaffected. */
+  var SPREAD_FROM_B = 0.13, SPREAD_TO_B = 0.34;
 
   function positionRig(rig, state) {
     var cv = easeInOut(clamp01((state.p - CONVERGE_FROM) / (CONVERGE_TO - CONVERGE_FROM)));
-    var x = state.anchor.x * rig.sign * (1 - cv);   // slides from its mirrored peak to centre
+    var spread = rig.sign > 0 ? 1 : easeOut(clamp01((state.p - SPREAD_FROM_B) / (SPREAD_TO_B - SPREAD_FROM_B)));
+    var x = state.anchor.x * rig.sign * spread * (1 - cv);   // slides from its mirrored peak to centre
     rig.pivot.position.set(x, state.anchor.y + ARM, 0);
 
-    var angle = state.angle * rig.sign;              // B is a true mirror, not a clone
+    var angle, angVel;
+    if (rig.sign > 0) {
+      angle = state.angle; angVel = state.angVel;
+    } else {
+      /* B runs its own independent spring while the two are still apart
+         (that's the "not a mirror" character from 2.8), but two springs
+         with different k/c ring down at different rates — left alone,
+         that beats a flickering burst in and out right as they close in,
+         since separation stops being monotonic. Blending B's rotation
+         into an exact mirror of A over the same cv used for the anchor
+         convergence forces zero residual rotational offset by the time
+         they actually meet, so contact reads as one clean touch. */
+      angle = angleB * (1 - cv) + (-state.angle) * cv;
+      angVel = angVelB * (1 - cv) + (-state.angVel) * cv;
+    }
     rig.pivot.rotation.z = angle;
     rig.bell.rotation.z = -angle * 0.30;
     rig.bell.rotation.y = rig.sign * (0.42 + state.p * 0.75);
-    rig.bell.rotation.x = -0.06 + (state.angVel * rig.sign) * 0.035;
+    rig.bell.rotation.x = -0.06 + angVel * 0.035;
   }
 
+  /* B fades in a beat after A (main.js's own appear is range(p, 0.09, 0.21))
+     rather than both solidifying from the same mark on the same frame —
+     the second body follows the first out, instead of the pair arriving
+     together like a stamp and its reflection. */
+  var APPEAR_FROM_B = 0.125, APPEAR_TO_B = 0.245;
+
   function dissolveRig(rig, solid, appear, warmth, eMat, burst, baseScale, p) {
+    var ownAppear = rig.sign > 0 ? appear : clamp01((p - APPEAR_FROM_B) / (APPEAR_TO_B - APPEAR_FROM_B));
     rig.bell.scale.setScalar(baseScale * (0.94 + 0.06 * Math.min(1, p / 0.18)) * (0.35 + 0.65 * solid));
     rig.bell.visible = solid > 0.01;
-    rig.bellMat.opacity = rig.handleMat.opacity = solid * appear;
+    rig.bellMat.opacity = rig.handleMat.opacity = solid * ownAppear;
     rig.bellMat.emissiveIntensity = rig.handleMat.emissiveIntensity = eMat * 0.10 * warmth + burst * 0.75;
   }
 
   var worldA = null, worldB = null;   // built in init(); THREE may not exist yet
 
+  /* Sum of the two bells' rendered radii in world units (profile radius
+     1.0 x BASE_SCALE, plus a little slack for the handle's reach) — the
+     centre-to-centre distance at which their surfaces actually meet. */
+  var CONTACT_DIST = BASE_SCALE * 2.05;
+
+  /* The mirror-blend above stops the two springs beating against each
+     other, but the swing's own damped spring still legitimately overshoots
+     its target before settling (that overshoot is the point of the single-
+     bell version too) — so separation can still dip below CONTACT_DIST,
+     rise back above it, then finally settle. Taken raw, that reopens the
+     bells after they've already dissolved: a pop-back-in, not a clean
+     explosion. burstPeak ratchets forward through a single scroll pass —
+     once contact is reached the burst can only hold or grow — and only
+     resets when scrolling back out before the swing starts, so scrubbing
+     to the very top still correctly reforms two solid bells. */
+  var burstPeak = 0;
+
   /* state = { p, angle, angVel, burstT, visible, energy } */
   function update(state) {
     if (!ready) return;
 
-    var burst = state.burstT;
-    var solid = 1 - easeOut(Math.min(1, burst / 0.45));   // the bells dissolving
     var appear = state.appear === undefined ? 1 : state.appear;
     var warmth = Math.min(1, Math.max(0, (state.p - 0.18) / 0.22));
     var eMat = Math.min(state.energy, 0.62);
     var baseScale = state.scale || BASE_SCALE;
 
     if (state.anchor) {
+      stepBellB(state.p);
       positionRig(rigA, state);
       positionRig(rigB, state);
     }
+
+    /* World positions first, purely from this frame's pivot/rotation —
+       unaffected by scale, so it's safe to read before dissolveRig runs. */
+    rigA.bell.updateMatrixWorld();
+    rigB.bell.updateMatrixWorld();
+    rigA.bell.getWorldPosition(worldA);
+    rigB.bell.getWorldPosition(worldB);
+
+    /* Contact-triggered burst: a pure function of how close the two
+       bells' actual rendered positions are *right now*, not a fixed
+       scroll-percentage schedule borrowed from the single-bell timing.
+       They explode exactly when their surfaces meet — scroll back out
+       before that and there is no burst at all — and it stays perfectly
+       reversible since nothing here is stateful.
+
+       Armed only from CONVERGE_FROM on: both bells morph in from the same
+       central mark, so early on they're already close together on their
+       way OUT to their mirrored peaks — without this gate that near-zero
+       starting separation would itself read as "contact" and burst
+       immediately, before the swing-apart even happens. */
+    var armed = state.p >= CONVERGE_FROM;
+    var separation = worldA.distanceTo(worldB);
+    var rawBurst = armed ? clamp01((CONTACT_DIST - separation) / CONTACT_DIST) : 0;
+    if (!armed) burstPeak = 0;                        // scrolled back out past the swing — rearm
+    burstPeak = Math.max(burstPeak, rawBurst);
+    var burst = burstPeak;
+
+    var solid = 1 - easeOut(Math.min(1, burst / 0.45));   // the bells dissolving
+
     dissolveRig(rigA, solid, appear, warmth, eMat, burst, baseScale, state.p);
     dissolveRig(rigB, solid, appear, warmth, eMat, burst, baseScale, state.p);
     rigA.bell.visible = state.visible && rigA.bell.visible;
@@ -618,12 +746,7 @@
     camera.position.z += ((camera.aspect < 0.8 ? 12.5 : (camera.aspect < 1.25 ? 10.5 : 9)) - 0.9 * state.p - camera.position.z) * 0.1;
 
     /* the burst and the trail both originate from the collision point —
-       the midpoint of the two bells, which by CONVERGE_TO is where they
-       actually meet */
-    rigA.bell.updateMatrixWorld();
-    rigB.bell.updateMatrixWorld();
-    rigA.bell.getWorldPosition(worldA);
-    rigB.bell.getWorldPosition(worldB);
+       the midpoint of the two bells, which is exactly where they touch */
     burstOrigin.addVectors(worldA, worldB).multiplyScalar(0.5);
     var bellWorld = burstOrigin;
 

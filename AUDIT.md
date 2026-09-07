@@ -371,3 +371,103 @@ you?" — no console errors. `index.html` re-checked afterward and confirmed una
 alternate/Easter-egg path, or stays a one-off. It changes the story the animation tells
 (one becomes two, then one again) rather than refining the existing one, so that's a
 call for whoever owns the narrative, not something to default into production.
+
+## 2.8 The twin bells read as a mirror, not two bodies
+
+2.7's first pass drove bell B by literally negating bell A's already-computed angle and
+angular velocity every frame — mathematically a perfect reflection at every instant, so
+any paused frame showed two bells in exactly mirrored poses. That reads as "one object
+and its reflection," not "two independent bells," which undercuts the founders framing
+the whole feature is built on.
+
+Fixed by giving bell B its own physics rather than an arithmetic mirror of A's. Bell A
+is untouched — it still runs on `state.angle`/`state.angVel` straight from `main.js`,
+identical to the single-bell page. Bell B now runs a second, independent copy of the
+same closed-form spring solver (`springStep`, copied verbatim from `main.js`) chasing
+its own target-angle curve (`targetAngleB`) with its own timing and reach — peaks a beat
+later (`p=0.64` vs the reference swing's `0.60`) and doesn't swing quite as far
+(`BACK_ANGLE_B=0.52`, `PEAK_ANGLE_B=-1.02` vs the mirror-exact `0.62`/`-1.18`), plus
+marginally softer spring constants (`k=22+p·18, c=5.8` vs `26+p·22, c=5.4`). The result:
+at any given scroll position the two bells are now visibly *not* reflections of each
+other — different lean, different momentum — while the anchor convergence that drives
+them together for the collision (`positionRig`'s `CONVERGE_FROM`/`CONVERGE_TO` blend)
+stays shared and synchronised between both, since that part has to land at the same
+place at the same time regardless of how their individual swings differ.
+
+Re-verified in Chrome: the asymmetry is clearly visible at rest and mid-swing, the
+collision and burst still land together correctly, no console errors.
+
+## 2.9 The collision/burst wasn't seamless
+
+The burst was still driven by `state.burstT` — the single-bell page's fixed
+scroll-percentage schedule (`BURST_FROM`/`BURST_TO` in `main.js`) — which has no idea
+where the two bells actually are. It was only approximately synced to 2.7's
+`CONVERGE_TO`, so the explosion could fire visibly before or after the bells' surfaces
+actually met.
+
+**Contact-triggered burst.** `burst` is no longer read from `state`; it's computed each
+frame in `swing-scene-twin.js` from the real distance between the two bells' current
+world positions (`worldA.distanceTo(worldB)`), remapped against `CONTACT_DIST`
+(`BASE_SCALE × 2.05` — the sum of their rendered radii, i.e. the distance at which their
+surfaces actually touch). Armed only once `state.p ≥ CONVERGE_FROM`, since both bells
+morph in from the same central 2D mark and are naturally close together on their way OUT
+to their mirrored peaks — without that gate, the near-zero starting separation would
+itself read as contact and burst immediately, before the swing-apart even happens.
+
+**The flicker.** First pass at this flickered — burst rose, dropped, rose again — because
+after the anchors converge to one point, the two bells are still hanging off two
+*separately* decaying springs with different `k`/`c` (that's 2.8's independent-bells
+fix). Different natural frequencies drift out of phase, so their separation beats rather
+than settling monotonically. Fixed by blending bell B's rotation into an *exact* mirror
+of bell A over the same `cv` fraction used for the anchor convergence — by the moment
+the anchors finish converging, B's angle is precisely `-angle`, cancelling the
+independent-spring divergence entirely, so the pair meets with zero residual rotational
+offset instead of two out-of-phase oscillators approaching each other unevenly.
+
+**The pop-back.** Even mirrored, the shared spring's own legitimate overshoot (the same
+momentum-driven overshoot that gives the single-bell swing its weight) could carry
+separation back above `CONTACT_DIST` for a moment before the final settle — which,
+read raw, dissolved the bells, then un-dissolved them, then dissolved them again: a
+visible pop-back-in, not an explosion. Fixed with `burstPeak`, a one-way ratchet:
+`burst` can only hold or grow through a forward scroll pass once contact starts, and
+only resets if `p` drops back below `CONVERGE_FROM` — so scrubbing all the way back to
+the top still correctly reforms two solid bells, but a forward pass through contact
+reads as one clean, committed explosion.
+
+Verified in Chrome: no premature burst on the way out, no flicker or reappearing bells
+through the collision, one seamless explosion on contact, and scrolling back to the top
+cleanly reforms both bells. No console errors.
+
+## 2.10 The split itself still read as a mirror
+
+2.8 and 2.9 fixed the swing and the collision, but the very first moment — the single
+outlined mark becoming two bells — was untouched, and it still looked like a reflection
+appearing in lockstep rather than a second body being born from the first. The cause:
+bell B's departure from the shared birth point was `state.anchor.x * rig.sign *
+(1 - cv)` — an exact negation of A's already-eased position, recomputed identically
+every single frame. Two things moving through the identical curve at the identical
+speed, just mirrored, reads as a stamp and its reflection, not two individuals.
+
+Two changes, both scoped to the emergence window only (`p` below `CONVERGE_FROM`, so
+nothing about the swing or collision changed):
+
+- **Delayed, differently-shaped departure.** Added `SPREAD_FROM_B`/`SPREAD_TO_B`
+  (0.13–0.34, a beat after `main.js`'s own anchor easing starts at 0.10) and warp B's
+  x-offset through `easeOut` instead of inheriting A's `easeInOut` shape. Both still
+  land at the same mirrored magnitude by `CONVERGE_FROM`, so the later convergence math
+  is unaffected — only the path there differs.
+- **Delayed emergence.** `dissolveRig` no longer applies `main.js`'s single shared
+  `appear` value (`range(p, 0.09, 0.21)`) to both rigs. B now fades in on its own curve,
+  `APPEAR_FROM_B`/`APPEAR_TO_B` = 0.125–0.245, roughly a third of the fade-in span
+  behind A.
+
+Verified by stepping through the exact emergence window frame-by-frame (`window.scrollTo`
+against the stage's own scroll-to-progress math, rather than mouse-wheel ticks too coarse
+to land inside a 0.09–0.34 progress window): at p≈0.11 only the single mark is visible;
+by p≈0.16 bell A has solidified alone at centre with no second bell yet; by p≈0.20 a
+faint, still-transparent second form is visibly peeling away; by p≈0.34 both are fully
+formed and symmetric at their mirrored peaks, ready for the swing. Reads as one body
+giving rise to a second, not two mirrored copies appearing together. (Caught one false
+result during this pass: a dynamically-injected `<script>` tag can survive a plain
+same-URL re-navigation in the browser's cache, silently re-running stale code — a real
+`location.reload()` was needed to confirm the fix, not just a fresh `navigate` call.)
